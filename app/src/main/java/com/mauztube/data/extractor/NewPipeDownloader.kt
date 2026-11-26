@@ -7,6 +7,7 @@ import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
+import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -81,24 +82,24 @@ class NewPipeDownloader @Inject constructor(
             if (response.code == 429) {
                 throw ReCaptchaException("reCaptcha Challenge requested", request.url())
             }
-            val body = response.body.string()
+            val responseBody = response.body.string()
             val url = request.url()
-            if ("/v1/next" in url) CommentAvatars.collect(body)
+            if ("/v1/next" in url) CommentAvatars.collect(responseBody)
             // Risposta del client visionOS: è quella da cui NewPipeExtractor prende gli URL degli
-            // stream (il client Android oggi restituisce solo un URL SABR senza formati diretti).
+            // stream in v0.27.x (senza più client Android/iOS).
             if (response.code == 200 && url.startsWith(GAPIS_PLAYER)) {
                 val sent = request.dataToSend()?.toString(Charsets.UTF_8)
                 // Solo per il video che l'utente sta aprendo (non per i precaricamenti): le
                 // connessioni aperte e poi inutilizzate invecchierebbero nel pool.
-                if (sent != null && "VISIONOS" in sent && EarlyPlayerHub.offer(url, sent, body)) {
-                    preconnectVideoServer(body)
+                if (sent != null && "VISIONOS" in sent && EarlyPlayerHub.offer(url, sent, responseBody)) {
+                    preconnectVideoServer(responseBody)
                 }
             }
             return Response(
                 response.code,
                 response.message,
                 response.headers.toMultimap(),
-                body,
+                responseBody,
                 response.request.url.toString(),
             )
         }
@@ -118,7 +119,8 @@ class NewPipeDownloader @Inject constructor(
         if (last != null && now - last < 60_000) return
         if (warmed.size > 32) warmed.clear()
         warmed[host] = now
-        val request = Builder().url("https://$host/generate_204").header("User-Agent", USER_AGENT).build()
+        val ua = runCatching { YoutubeParsingHelper.getVisionOsUserAgent(null) }.getOrDefault(USER_AGENT)
+        val request = Builder().url("https://$host/generate_204").header("User-Agent", ua).build()
         repeat(2) {
             media.newCall(request).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) = Unit
@@ -134,6 +136,6 @@ class NewPipeDownloader @Inject constructor(
         private val CLIENT_VERSION = Regex("""clientVersion"\s*:\s*"([^"]+)""")
         private val VIDEO_HOST = Regex("""rr\d+---sn-[a-z0-9-]+\.googlevideo\.com""")
         const val USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0"
     }
 }

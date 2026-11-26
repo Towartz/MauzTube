@@ -28,7 +28,6 @@ import com.mauztube.data.innertube.AuthenticatedStreamFetcher
 import com.mauztube.data.model.VideoDetails
 import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.OkHttpClient
-import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import javax.inject.Inject
 import javax.inject.Singleton
 
