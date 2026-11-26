@@ -7,6 +7,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -590,91 +592,102 @@ fun PlayerWithControls(
         }
 
         AnimatedVisibility(visible = visible || scrubFraction != null, enter = fadeIn(), exit = fadeOut()) {
-            Box(
+            BoxWithConstraints(
                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f))
                     // A schermo intero i comandi evitano foro/notch della fotocamera e barre di sistema,
                     // con lo stesso margine a sinistra e a destra (restano centrati).
                     .then(if (fullscreen) Modifier.symmetricSafeDrawing() else Modifier)
             ) {
+                val compactTop = maxWidth < 520.dp
+                val titleView: @Composable (Modifier) -> Unit = { titleModifier ->
+                    Text(
+                        title,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = titleModifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = infoPanel != null) { infoOpen = true; visible = false }
+                            .padding(horizontal = 6.dp, vertical = 8.dp),
+                    )
+                }
                 // --- riga superiore ---
-                Row(
-                    Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (!fullscreen) {
-                        ControlButton(Icons.Default.KeyboardArrowDown, tr("Minimize", "Riduci"), onMinimize)
-                        Spacer(Modifier.weight(1f))
-                    } else {
-                        // A schermo intero, come su YouTube: freccia in giù (esce dallo schermo
-                        // intero) e titolo del video; toccando il titolo si aprono le informazioni.
-                        ControlButton(Icons.Default.KeyboardArrowDown, tr("Exit full screen", "Esci da schermo intero"), {
-                            onSetFullscreen(false)
-                            if (isTv) onMinimize()
-                        })
-                        if (title.isNotBlank()) {
-                            Text(
-                                title,
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable(enabled = infoPanel != null) { infoOpen = true; visible = false }
-                                    .padding(horizontal = 6.dp, vertical = 8.dp),
-                            )
-                        } else {
+                Column(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        if (!fullscreen) {
+                            ControlButton(Icons.Default.KeyboardArrowDown, tr("Minimize", "Riduci"), onMinimize)
                             Spacer(Modifier.weight(1f))
+                        } else {
+                            // A schermo intero, come su YouTube: freccia in giù (esce dallo schermo
+                            // intero) e titolo del video; toccando il titolo si aprono le informazioni.
+                            ControlButton(Icons.Default.KeyboardArrowDown, tr("Exit full screen", "Esci da schermo intero"), {
+                                onSetFullscreen(false)
+                                if (isTv) onMinimize()
+                            })
+                            if (!compactTop && title.isNotBlank()) {
+                                titleView(Modifier.weight(1f))
+                            } else {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (queueSize > 0) {
+                                ControlButton(AppIcons.Queue, tr("Queue ($queueSize)", "Coda ($queueSize)"), onOpenQueue, tint = primary)
+                            }
+                            // Trasmissione dello schermo alla TV (Chromecast, Smart View, Miracast…).
+                            // Non sulla TV stessa.
+                            if (!isTv) {
+                                val context = androidx.compose.ui.platform.LocalContext.current
+                                ControlButton(AppIcons.Cast, tr("Cast screen", "Trasmetti schermo"), {
+                                    interaction++
+                                    com.mauztube.util.ScreenCast.open(context)
+                                })
+                            }
+                            ControlButton(
+                                AppIcons.Autoplay, tr("Autoplay", "Riproduzione automatica"),
+                                onClick = {
+                                    onToggleAutoplay()
+                                    seekFeedback = if (!autoplay) tr("Autoplay on", "Riproduzione automatica attiva")
+                                    else tr("Autoplay off", "Riproduzione automatica disattivata")
+                                    interaction++
+                                },
+                                tint = if (autoplay) primary else Color.White,
+                            )
+                            ControlButton(
+                                AppIcons.RepeatOne, tr("Loop", "Ripeti"),
+                                onClick = {
+                                    onToggleLoop()
+                                    seekFeedback = if (!loop) tr("Loop on", "Ripetizione attiva") else tr("Loop off", "Ripetizione disattivata")
+                                    interaction++
+                                },
+                                tint = if (loop) primary else Color.White,
+                            )
+                            ControlButton(AppIcons.PictureInPicture, tr("Pop-up", "Popup"), onPip)
+                            ControlButton(
+                                AppIcons.Headphones, tr("Audio only", "Solo audio"), onToggleAudioOnly,
+                                tint = if (audioOnly) primary else Color.White,
+                            )
+                            val subtitleIndex by manager.subtitleIndex.collectAsStateWithLifecycle()
+                            if (manager.textTracks().isNotEmpty()) {
+                                ControlButton(
+                                    AppIcons.ClosedCaption, tr("Subtitles", "Sottotitoli"),
+                                    onClick = {
+                                        manager.selectTextTrack(if (subtitleIndex == null) 0 else null)
+                                        interaction++
+                                    },
+                                    tint = if (subtitleIndex != null) primary else Color.White,
+                                )
+                            }
+                            ControlButton(Icons.Default.Settings, tr("Settings", "Impostazioni"), { sheetOpen = true })
                         }
                     }
-                    if (queueSize > 0) {
-                        ControlButton(AppIcons.Queue, tr("Queue ($queueSize)", "Coda ($queueSize)"), onOpenQueue, tint = primary)
+                    if (fullscreen && compactTop && title.isNotBlank()) {
+                        titleView(Modifier.fillMaxWidth().padding(horizontal = 6.dp))
                     }
-                    // Trasmissione dello schermo alla TV (Chromecast, Smart View, Miracast…).
-                    // Non sulla TV stessa.
-                    if (!isTv) {
-                        val context = androidx.compose.ui.platform.LocalContext.current
-                        ControlButton(AppIcons.Cast, tr("Cast screen", "Trasmetti schermo"), {
-                            interaction++
-                            com.mauztube.util.ScreenCast.open(context)
-                        })
-                    }
-                    ControlButton(
-                        AppIcons.Autoplay, tr("Autoplay", "Riproduzione automatica"),
-                        onClick = {
-                            onToggleAutoplay()
-                            seekFeedback = if (!autoplay) tr("Autoplay on", "Riproduzione automatica attiva")
-                            else tr("Autoplay off", "Riproduzione automatica disattivata")
-                            interaction++
-                        },
-                        tint = if (autoplay) primary else Color.White,
-                    )
-                    ControlButton(
-                        AppIcons.RepeatOne, tr("Loop", "Ripeti"),
-                        onClick = {
-                            onToggleLoop()
-                            seekFeedback = if (!loop) tr("Loop on", "Ripetizione attiva") else tr("Loop off", "Ripetizione disattivata")
-                            interaction++
-                        },
-                        tint = if (loop) primary else Color.White,
-                    )
-                    ControlButton(AppIcons.PictureInPicture, tr("Pop-up", "Popup"), onPip)
-                    ControlButton(
-                        AppIcons.Headphones, tr("Audio only", "Solo audio"), onToggleAudioOnly,
-                        tint = if (audioOnly) primary else Color.White,
-                    )
-                    val subtitleIndex by manager.subtitleIndex.collectAsStateWithLifecycle()
-                    if (manager.textTracks().isNotEmpty()) {
-                        ControlButton(
-                            AppIcons.ClosedCaption, tr("Subtitles", "Sottotitoli"),
-                            onClick = {
-                                manager.selectTextTrack(if (subtitleIndex == null) 0 else null)
-                                interaction++
-                            },
-                            tint = if (subtitleIndex != null) primary else Color.White,
-                        )
-                    }
-                    ControlButton(Icons.Default.Settings, tr("Settings", "Impostazioni"), { sheetOpen = true })
                 }
 
                 // --- controlli centrali ---
