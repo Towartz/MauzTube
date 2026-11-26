@@ -1,6 +1,9 @@
 package com.mauztube
 
 import android.content.Context
+import android.content.pm.ActivityInfo
+import android.provider.Settings
+import android.view.OrientationEventListener
 import kotlinx.coroutines.flow.combine
 import com.mauztube.player.PlaybackManager
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -48,6 +51,9 @@ class MainActivity : ComponentActivity() {
     private val inPip = mutableStateOf(false)
     private var pipJustClosed = false
     private var autoPipSetting = true
+    private var inFullscreenSession = false
+    private var restorePortraitOnExit = false
+    private var orientationListener: OrientationEventListener? = null
 
 
     private val deepLinks = Channel<DeepLink>(Channel.BUFFERED)
@@ -189,6 +195,80 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         // Popup chiuso con la X: come su YouTube il video si ferma.
         if (pipJustClosed && playbackManager.nowPlaying.value != null) playbackManager.player.pause()
+    }
+
+    override fun onDestroy() {
+        cancelOrientationRestore()
+        super.onDestroy()
+    }
+
+    /**
+     * Gestisce l'orientamento a schermo intero:
+     *  - i video verticali restano in verticale (sui telefoni/tablet) invece di essere forzati in orizzontale;
+     *  - all'uscita dallo schermo intero, se prima si era in verticale, si torna in verticale
+     *    senza restare bloccati in orizzontale quando la rotazione automatica è attiva.
+     */
+    fun enterFullscreen(isVerticalVideo: Boolean, isTv: Boolean, currentlyLandscape: Boolean) {
+        cancelOrientationRestore()
+        if (!inFullscreenSession) {
+            inFullscreenSession = true
+            restorePortraitOnExit = !currentlyLandscape && !isTv
+        }
+        updateFullscreenOrientation(isVerticalVideo, isTv)
+    }
+
+    fun updateFullscreenOrientation(isVerticalVideo: Boolean, isTv: Boolean) {
+        if (!inFullscreenSession) return
+        requestedOrientation = if (isVerticalVideo && !isTv) {
+            ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+    }
+
+    fun exitFullscreen() {
+        if (!inFullscreenSession) return
+        inFullscreenSession = false
+        val shouldRestorePortrait = restorePortraitOnExit
+        restorePortraitOnExit = false
+        cancelOrientationRestore()
+        if (!shouldRestorePortrait) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            return
+        }
+        val autoRotate = runCatching {
+            Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+        }.getOrDefault(false)
+        if (!autoRotate) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            return
+        }
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+        val listener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                if (orientation <= 30 || orientation >= 330) {
+                    disable()
+                    if (orientationListener === this) {
+                        orientationListener = null
+                        if (!inFullscreenSession) {
+                            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        }
+                    }
+                }
+            }
+        }
+        if (listener.canDetectOrientation()) {
+            orientationListener = listener
+            listener.enable()
+        } else {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    private fun cancelOrientationRestore() {
+        orientationListener?.disable()
+        orientationListener = null
     }
 
 }

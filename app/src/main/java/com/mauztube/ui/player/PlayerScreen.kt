@@ -115,12 +115,18 @@ fun PlayerScreen(
     val loop by vm.loop.collectAsStateWithLifecycle()
     val nowPlaying by vm.nowPlaying.collectAsStateWithLifecycle()
     val fullscreen by vm.fullscreen.collectAsStateWithLifecycle()
+    val videoSize by vm.videoSize.collectAsStateWithLifecycle()
     val subscribed by vm.subscribed.collectAsStateWithLifecycle()
     val inWatchLater by vm.inWatchLater.collectAsStateWithLifecycle()
     val audioOnly by vm.audioOnly.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    val videoRatio = if (videoSize.width > 0 && videoSize.height > 0) {
+        (videoSize.width.toFloat() * videoSize.pixelWidthHeightRatio / videoSize.height).coerceAtLeast(0.1f)
+    } else 16f / 9f
+    val isVerticalVideo = videoSize.width > 0 && videoSize.height > 0 && videoRatio < 1f
 
     // Il video mostrato è sempre quello caricato nel PlaybackManager.
     val state = nowPlaying?.takeIf { it.videoId == vm.videoId }?.state ?: PlayerUiState.Loading
@@ -131,13 +137,14 @@ fun PlayerScreen(
     // stesso meccanismo segue il dito quando lo si trascina verso il basso.
     // Su TV il video parte a schermo intero e "indietro" torna subito alla schermata precedente.
     val isTv = com.mauztube.ui.components.LocalIsTv.current
+    val window = com.mauztube.ui.components.windowSize()
     LaunchedEffect(vm.videoId, isTv) { if (isTv) vm.setFullscreen(true) }
     BackHandler(enabled = fullscreen) {
         vm.setFullscreen(false)
         if (isTv) onBack()
     }
 
-    FullscreenEffect(fullscreen)
+    FullscreenEffect(fullscreen, isVerticalVideo, isTv, window.landscape)
     val rating by vm.rating.collectAsStateWithLifecycle()
     val votes by vm.votes.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
@@ -174,7 +181,6 @@ fun PlayerScreen(
     ) { padding ->
         // Schermo largo e basso (telefono in orizzontale, tablet): video a sinistra e dettagli
         // a destra, invece di un video più alto dello schermo.
-        val window = com.mauztube.ui.components.windowSize()
         val sideBySide = !fullscreen && window.landscape && window.wide
         val playerView: @Composable (Modifier) -> Unit = { playerModifier ->
             PlayerWithControls(
@@ -255,7 +261,11 @@ fun PlayerScreen(
         // Un solo punto di composizione per il player: cambiando disposizione (schermo intero,
         // affiancato) il video non viene ricreato e non lampeggia.
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
-            val playerHeight = maxWidth * 9f / 16f
+            val defaultHeight = maxWidth * 9f / 16f
+            val playerHeight = if (isVerticalVideo && !audioOnly) {
+                (maxWidth / videoRatio.coerceAtLeast(3f / 4f))
+                    .coerceIn(defaultHeight, maxOf(defaultHeight, maxHeight * 0.55f))
+            } else defaultHeight
             playerView(
                 when {
                     fullscreen -> Modifier.fillMaxSize()
@@ -274,8 +284,18 @@ fun PlayerScreen(
 }
 
 @Composable
-private fun FullscreenEffect(fullscreen: Boolean) {
+private fun FullscreenEffect(
+    fullscreen: Boolean,
+    isVerticalVideo: Boolean,
+    isTv: Boolean,
+    currentlyLandscape: Boolean,
+) {
     val activity: Activity = LocalActivity.current ?: return
+    val mainActivity = activity as? com.mauztube.MainActivity
+    val latestLandscape by rememberUpdatedState(currentlyLandscape)
+    val latestIsTv by rememberUpdatedState(isTv)
+    val latestVertical by rememberUpdatedState(isVerticalVideo)
+
     DisposableEffect(fullscreen) {
         val window = activity.window
         val controller = WindowCompat.getInsetsController(window, window.decorView)
@@ -291,13 +311,36 @@ private fun FullscreenEffect(fullscreen: Boolean) {
                     layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
             }
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            mainActivity?.enterFullscreen(latestVertical, latestIsTv, latestLandscape)
+                ?: run {
+                    activity.requestedOrientation = if (latestVertical && !latestIsTv) {
+                        ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    }
+                }
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
         }
         onDispose {
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            controller.show(WindowInsetsCompat.Type.systemBars())
+            if (fullscreen) {
+                mainActivity?.exitFullscreen()
+                    ?: run { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    LaunchedEffect(fullscreen, isVerticalVideo, isTv) {
+        if (fullscreen) {
+            mainActivity?.updateFullscreenOrientation(isVerticalVideo, isTv)
+                ?: run {
+                    activity.requestedOrientation = if (isVerticalVideo && !isTv) {
+                        ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    }
+                }
         }
     }
 }
