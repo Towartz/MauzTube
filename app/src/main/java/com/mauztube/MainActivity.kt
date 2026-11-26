@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
     private var pipJustClosed = false
     private var autoPipSetting = true
     private var inFullscreenSession = false
+    private var fullscreenToken: Any? = null
     private var restorePortraitOnExit = false
     private var orientationListener: OrientationEventListener? = null
 
@@ -134,7 +135,9 @@ class MainActivity : ComponentActivity() {
             MauzTubeTheme(mode = appSettings.themeMode, dynamicColor = appSettings.dynamicColor) {
                 CompositionLocalProvider(LocalInPip provides inPip.value) {
                     com.mauztube.ui.components.TvEnvironment {
-                        AppNavigation(deepLinks.receiveAsFlow())
+                        com.mauztube.ui.components.ProvideWindowSize {
+                            AppNavigation(deepLinks.receiveAsFlow())
+                        }
                     }
                 }
             }
@@ -208,8 +211,9 @@ class MainActivity : ComponentActivity() {
      *  - all'uscita dallo schermo intero, se prima si era in verticale, si torna in verticale
      *    senza restare bloccati in orizzontale quando la rotazione automatica è attiva.
      */
-    fun enterFullscreen(isVerticalVideo: Boolean, isTv: Boolean, currentlyLandscape: Boolean) {
+    fun enterFullscreen(token: Any, isVerticalVideo: Boolean, isTv: Boolean, currentlyLandscape: Boolean) {
         cancelOrientationRestore()
+        fullscreenToken = token
         if (!inFullscreenSession) {
             inFullscreenSession = true
             restorePortraitOnExit = !currentlyLandscape && !isTv
@@ -226,22 +230,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun exitFullscreen() {
-        if (!inFullscreenSession) return
+    fun exitFullscreen(token: Any): Boolean {
+        if (!inFullscreenSession || fullscreenToken !== token) return false
+        fullscreenToken = null
         inFullscreenSession = false
         val shouldRestorePortrait = restorePortraitOnExit
         restorePortraitOnExit = false
         cancelOrientationRestore()
         if (!shouldRestorePortrait) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            return
+            return true
         }
         val autoRotate = runCatching {
             Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
         }.getOrDefault(false)
         if (!autoRotate) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            return
+            return true
         }
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
         val listener = object : OrientationEventListener(this) {
@@ -264,6 +269,7 @@ class MainActivity : ComponentActivity() {
         } else {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+        return true
     }
 
     private fun cancelOrientationRestore() {

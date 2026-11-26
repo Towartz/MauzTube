@@ -341,7 +341,8 @@ fun PlayerWithControls(
         }
     }
 
-    val exitScreenH = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height.toFloat().coerceAtLeast(1f)
+    val winHeightPx = com.mauztube.ui.components.windowSize().heightPx.toFloat()
+    val exitScreenH = winHeightPx.coerceAtLeast(1f)
     Box(
         modifier
             // Il valore è letto in fase di disegno: il trascinamento non ricompone nulla.
@@ -391,7 +392,7 @@ fun PlayerWithControls(
         val swipeThreshold = with(density) { 64.dp.toPx() }
         val flingVelocityPx = with(density) { 1000.dp.toPx() }
         val backDispatcher = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-        val windowHeightPx = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height.toFloat()
+        val windowHeightPx by androidx.compose.runtime.rememberUpdatedState(winHeightPx)
         var gestureCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
         val gestureScope = rememberCoroutineScope()
         fun relatedHeightPx(): Float = relatedH.takeIf { it > 0 }?.toFloat() ?: with(density) { 300.dp.toPx() }

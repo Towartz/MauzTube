@@ -179,9 +179,6 @@ fun PlayerScreen(
         containerColor = if (fullscreen) Color.Black else MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
-        // Schermo largo e basso (telefono in orizzontale, tablet): video a sinistra e dettagli
-        // a destra, invece di un video più alto dello schermo.
-        val sideBySide = !fullscreen && window.landscape && window.wide
         val playerView: @Composable (Modifier) -> Unit = { playerModifier ->
             PlayerWithControls(
                 manager = vm.manager,
@@ -261,6 +258,9 @@ fun PlayerScreen(
         // Un solo punto di composizione per il player: cambiando disposizione (schermo intero,
         // affiancato) il video non viene ricreato e non lampeggia.
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
+            // Schermo largo e basso (telefono in orizzontale, tablet): video a sinistra e dettagli
+            // a destra, invece di un video più alto dello schermo.
+            val sideBySide = !fullscreen && maxWidth > maxHeight && maxWidth >= 600.dp
             val defaultHeight = maxWidth * 9f / 16f
             val playerHeight = if (isVerticalVideo && !audioOnly) {
                 (maxWidth / videoRatio.coerceAtLeast(3f / 4f))
@@ -292,6 +292,7 @@ private fun FullscreenEffect(
 ) {
     val activity: Activity = LocalActivity.current ?: return
     val mainActivity = activity as? com.mauztube.MainActivity
+    val sessionToken = remember { Any() }
     val latestLandscape by rememberUpdatedState(currentlyLandscape)
     val latestIsTv by rememberUpdatedState(isTv)
     val latestVertical by rememberUpdatedState(isVerticalVideo)
@@ -311,7 +312,7 @@ private fun FullscreenEffect(
                     layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
             }
-            mainActivity?.enterFullscreen(latestVertical, latestIsTv, latestLandscape)
+            mainActivity?.enterFullscreen(sessionToken, latestVertical, latestIsTv, latestLandscape)
                 ?: run {
                     activity.requestedOrientation = if (latestVertical && !latestIsTv) {
                         ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
@@ -324,9 +325,11 @@ private fun FullscreenEffect(
         }
         onDispose {
             if (fullscreen) {
-                mainActivity?.exitFullscreen()
-                    ?: run { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
-                controller.show(WindowInsetsCompat.Type.systemBars())
+                val exited = mainActivity?.exitFullscreen(sessionToken) ?: run {
+                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    true
+                }
+                if (exited) controller.show(WindowInsetsCompat.Type.systemBars())
             }
         }
     }
