@@ -1,27 +1,31 @@
-name: Build APK
+name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
-# Privilegi minimi: il token di Actions può solo leggere il repository.
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
-  build:
+  debug:
+    name: Build Debug APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      # true se è configurato il keystore di firma (secret KEYSTORE_BASE64).
-      # Deve stare a livello di job: le variabili di un singolo step non sono leggibili nei suoi "if".
-      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -29,61 +33,122 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      # Il pacchetto predefinito "tools" non esiste più nell'SDK: si installa solo il necessario.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools platforms;android-37.0"
+          packages: "platform-tools build-tools;36.0.0 platforms;android-37.0"
 
-      - name: Set up Gradle (con cache)
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: MauzTube-debug-${{ github.sha }}
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
           if-no-files-found: error
 
-      # ---- Release ottimizzata firmata con la chiave di debug (senza keystore personale) ----
-      - name: Build release APK (chiave di debug)
-        if: env.HAS_KEYSTORE != 'true'
-        run: ./gradlew assembleRelease -PdebugSign --stacktrace
+  release:
+    name: Build Release APK
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
 
-      - name: Upload release APK (chiave di debug)
-        if: env.HAS_KEYSTORE != 'true'
-        uses: actions/upload-artifact@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          name: MauzTube-release-debugkey-${{ github.sha }}
-          path: app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
+          persist-credentials: false
 
-      # ---- Release firmata con il keystore personale (solo se i secret sono configurati) ----
-      - name: Decode keystore
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools build-tools;36.0.0 platforms;android-37.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare signing keystore
         id: keystore
-        if: env.HAS_KEYSTORE == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            keystore_path="$RUNNER_TEMP/release.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$keystore_path"
+            chmod 600 "$keystore_path"
+            echo "path=$keystore_path" >> "$GITHUB_OUTPUT"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Build signed release APK
-        if: env.HAS_KEYSTORE == 'true'
+      - name: Assemble release APK
         env:
-          MAUZTUBE_KEYSTORE: ${{ steps.keystore.outputs.path }}
-          MAUZTUBE_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          MAUZTUBE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          MAUZTUBE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --stacktrace
+          SIGNED: ${{ steps.keystore.outputs.signed }}
+          KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS_VAL: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ "$SIGNED" = "true" ]; then
+            export MAUZTUBE_KEYSTORE="$KEYSTORE_PATH"
+            export MAUZTUBE_KEYSTORE_PASSWORD="$KEYSTORE_PASS"
+            export MAUZTUBE_KEY_ALIAS="$KEY_ALIAS_VAL"
+            export MAUZTUBE_KEY_PASSWORD="$KEY_PASS"
+            ./gradlew assembleRelease --stacktrace --no-daemon
+          else
+            ./gradlew assembleRelease -PdebugSign --stacktrace --no-daemon
+          fi
 
-      - name: Upload signed release APK
-        if: env.HAS_KEYSTORE == 'true'
+      - name: Clean up signing keystore
+        if: always() && steps.keystore.outputs.path != ''
+        run: rm -f "${{ steps.keystore.outputs.path }}"
+
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: MauzTube-release-${{ github.sha }}
           path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
           if-no-files-found: error
+
+  publish:
+    name: Publish Tag Release
+    needs: [debug, release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: MauzTube-release-${{ github.sha }}
+          path: dist
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.apk --clobber
+          else
+            gh release create "$TAG" dist/*.apk --title "$TAG" --generate-notes
+          fi
