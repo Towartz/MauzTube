@@ -15,9 +15,64 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
+env:
+  SDK_PACKAGES: "platform-tools build-tools;36.0.0 platforms;android-37.0"
+  GRADLE_JVM_ARGS: "-Xmx6g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+  KOTLIN_JVM_ARGS: "-Xmx3g -XX:+UseParallelGC"
+
 jobs:
   debug:
     name: Build Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ${{ env.SDK_PACKAGES }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Assemble debug APK
+        run: >
+          ./gradlew assembleDebug
+          --no-daemon
+          --parallel
+          --build-cache
+          --configuration-cache
+          --configuration-cache-problems=warn
+          -Dorg.gradle.vfs.watch=false
+          "-Dorg.gradle.jvmargs=${GRADLE_JVM_ARGS}"
+          "-Dkotlin.daemon.jvmargs=${KOTLIN_JVM_ARGS}"
+          --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MauzTube-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: Build Release APK
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -36,47 +91,12 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools build-tools;36.0.0 platforms;android-37.0"
+          packages: ${{ env.SDK_PACKAGES }}
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Assemble debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
         with:
-          name: MauzTube-debug-${{ github.sha }}
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
-          if-no-files-found: error
-
-  release:
-    name: Build Release APK
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: "platform-tools build-tools;36.0.0 platforms;android-37.0"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+          gradle-home-cache-cleanup: true
 
       - name: Prepare signing keystore
         id: keystore
@@ -104,15 +124,25 @@ jobs:
           KEY_ALIAS_VAL: ${{ secrets.KEY_ALIAS }}
           KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
+          extra_args=()
           if [ "$SIGNED" = "true" ]; then
             export MAUZTUBE_KEYSTORE="$KEYSTORE_PATH"
             export MAUZTUBE_KEYSTORE_PASSWORD="$KEYSTORE_PASS"
             export MAUZTUBE_KEY_ALIAS="$KEY_ALIAS_VAL"
             export MAUZTUBE_KEY_PASSWORD="$KEY_PASS"
-            ./gradlew assembleRelease --stacktrace --no-daemon
           else
-            ./gradlew assembleRelease -PdebugSign --stacktrace --no-daemon
+            extra_args+=("-PdebugSign")
           fi
+          ./gradlew assembleRelease "${extra_args[@]}" \
+            --no-daemon \
+            --parallel \
+            --build-cache \
+            --configuration-cache \
+            --configuration-cache-problems=warn \
+            -Dorg.gradle.vfs.watch=false \
+            "-Dorg.gradle.jvmargs=${GRADLE_JVM_ARGS}" \
+            "-Dkotlin.daemon.jvmargs=${KOTLIN_JVM_ARGS}" \
+            --stacktrace
 
       - name: Clean up signing keystore
         if: always() && steps.keystore.outputs.path != ''
@@ -123,6 +153,7 @@ jobs:
         with:
           name: MauzTube-release-${{ github.sha }}
           path: app/build/outputs/apk/release/*.apk
+          compression-level: 0
           retention-days: 30
           if-no-files-found: error
 
