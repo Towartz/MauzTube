@@ -394,6 +394,7 @@ class PlaybackManager @Inject constructor(
         resumeOverrideMs = startMs
         skipper.setSegments(emptyList())
         _votes.value = null
+        _videoSize.value = androidx.media3.common.VideoSize.UNKNOWN
         player.stop()
         player.clearMediaItems()
         _nowPlaying.value = NowPlaying(videoId, preview, PlayerUiState.Loading)
@@ -423,6 +424,7 @@ class PlaybackManager @Inject constructor(
         _nowPlaying.value = null
         _queue.value = emptyList()
         _fullscreen.value = false
+        _videoSize.value = androidx.media3.common.VideoSize.UNKNOWN
         appScope.launch(saveDispatcher) { playback.clearActiveVideo() }
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null

@@ -49,6 +49,7 @@ class PlayerViewModel @Inject constructor(
     val queue = manager.queue
 
     val fullscreen: StateFlow<Boolean> = manager.fullscreen
+    val videoSize: StateFlow<androidx.media3.common.VideoSize> = manager.videoSize
     val autoplay: StateFlow<Boolean> = manager.autoplay
     val loop: StateFlow<Boolean> = manager.loop
     fun toggleAutoplay() = manager.setAutoplay(!autoplay.value)
