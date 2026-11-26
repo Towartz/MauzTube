@@ -6,7 +6,7 @@ import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 
 /**
  * Come va richiesto un URL googlevideo: gli stream rispondono 403 se lo User-Agent non
- * corrisponde al client InnerTube (ANDROID, IOS, TV, WEB…) con cui sono stati ottenuti.
+ * corrisponde al client InnerTube (VISIONOS, TV, WEB…) con cui sono stati ottenuti.
  * Usato sia dal player sia dai download.
  */
 data class YouTubeStreamRequest(val headers: Map<String, String>, val postBody: ByteArray?) {
@@ -16,14 +16,11 @@ data class YouTubeStreamRequest(val headers: Map<String, String>, val postBody: 
                 return YouTubeStreamRequest(mapOf("User-Agent" to NewPipeDownloader.USER_AGENT), null)
             }
             val ua = when {
-                YoutubeParsingHelper.isAndroidStreamingUrl(url) -> YoutubeParsingHelper.getAndroidUserAgent(null)
-                YoutubeParsingHelper.isIosStreamingUrl(url) -> YoutubeParsingHelper.getIosUserAgent(null)
                 url.contains("c=TVHTML5") -> AuthenticatedStreamFetcher.TV_USER_AGENT
                 YoutubeParsingHelper.isVisionOsStreamingUrl(url) -> YoutubeParsingHelper.getVisionOsUserAgent(null)
                 else -> NewPipeDownloader.USER_AGENT
             }
-            val web = YoutubeParsingHelper.isWebStreamingUrl(url) ||
-                YoutubeParsingHelper.isWebEmbeddedPlayerStreamingUrl(url)
+            val web = YoutubeParsingHelper.isWebStreamingUrl(url)
             return if (web) {
                 // Come il player web: POST con corpo "x\0" evita il throttling sugli stream web.
                 YouTubeStreamRequest(

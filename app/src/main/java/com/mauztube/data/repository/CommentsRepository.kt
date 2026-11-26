@@ -73,8 +73,8 @@ class CommentsRepository @Inject constructor(
             // NewPipe non trova più gli avatar dei commenti: si usa quello letto dalla risposta.
             authorAvatarUrl = uploaderAvatars.bestUrl(96) ?: com.mauztube.data.extractor.CommentAvatars.forChannelUrl(uploaderUrl),
             authorUrl = uploaderUrl,
-            textHtml = text.content.orEmpty(),
-            isHtml = text.type == Description.HTML,
+            textHtml = text.content(),
+            isHtml = text.type() == Description.Type.HTML,
             likes = textualLikeCount?.takeIf { it.isNotBlank() } ?: likeCount.takeIf { it > 0 }?.toString().orEmpty(),
             date = textualUploadDate.orEmpty(),
             replyCount = replyCount.coerceAtLeast(0),
