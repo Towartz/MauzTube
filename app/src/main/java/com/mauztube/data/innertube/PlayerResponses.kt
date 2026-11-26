@@ -66,7 +66,8 @@ object PlayerResponses {
                 fps = f.int("fps") ?: 0,
                 bitrate = f.int("averageBitrate") ?: f.int("bitrate") ?: 0,
                 isOriginalAudio = f.obj("audioTrack")?.let {
-                    (it["audioIsDefault"] as? JsonPrimitive)?.booleanOrNull
+                    (it["audioIsDefault"] as? JsonPrimitive)?.booleanOrNull != false &&
+                        (it["isAutoDubbed"] as? JsonPrimitive)?.booleanOrNull != true
                 } ?: true,
                 contentLength = f.str("contentLength")?.toLongOrNull() ?: -1,
                 itag = f.int("itag") ?: -1,
