@@ -2,16 +2,14 @@ package com.mauztube.ui.channel
 
 import com.mauztube.util.tr
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -27,11 +25,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mauztube.ui.components.Avatar
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -109,6 +106,7 @@ fun ChannelScreen(
                 },
             )
         },
+        contentWindowInsets = WindowInsets(0),
     ) { padding ->
         ContentList(
             state = state,
@@ -141,20 +139,17 @@ private fun ChannelHeader(h: ChannelDetails, subscribed: Boolean, onToggle: () -
             )
         }
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = h.avatarUrl,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp).clip(CircleShape).background(Color.Gray),
-            )
+            Avatar(h.avatarUrl, h.name, 64)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(h.name, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                Text(h.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (h.subscriberCount >= 0) {
                     Text(tr("${Format.count(h.subscriberCount)} subscribers", "${Format.count(h.subscriberCount)} iscritti"), style = MaterialTheme.typography.bodySmall)
                 }
             }
-            if (subscribed) OutlinedButton(onClick = onToggle) { Text(tr("Subscribed", "Iscritto")) }
-            else Button(onClick = onToggle) { Text(tr("Subscribe", "Iscriviti")) }
+            Spacer(Modifier.width(8.dp))
+            if (subscribed) OutlinedButton(onClick = onToggle) { Text(tr("Subscribed", "Iscritto"), maxLines = 1) }
+            else Button(onClick = onToggle) { Text(tr("Subscribe", "Iscriviti"), maxLines = 1) }
         }
     }
 }

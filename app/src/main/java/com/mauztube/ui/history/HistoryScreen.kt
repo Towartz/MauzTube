@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -99,7 +98,14 @@ fun HistoryScreen(
             if (state.items.isNotEmpty()) {
                 LazyColumn(Modifier.fillMaxSize()) {
                     item { MyCommentsCard(onMyComments) }
-                    item { AssistChip(onClick = {}, label = { Text(tr("Google account history", "Cronologia dell'account Google")) }, modifier = Modifier.padding(horizontal = 12.dp)) }
+                    item {
+                        Text(
+                            tr("Google account history", "Cronologia dell'account Google"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                    }
                     items(state.items, key = { it.id }) { v ->
                         val p = progress[v.id]
                         VideoCard(

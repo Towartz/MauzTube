@@ -4,15 +4,22 @@ import com.mauztube.util.tr
 
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AssistChip
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -198,14 +205,12 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        AssistChip(
-                            onClick = {},
-                            label = {
-                                Text(
-                                    if (source == HomeSource.ACCOUNT) tr("From your Google account", "Dal tuo account Google")
-                                    else tr("Based on your subscriptions and history", "In base a iscrizioni e video visti")
-                                )
-                            },
+                        Text(
+                            if (source == HomeSource.ACCOUNT) tr("From your Google account", "Dal tuo account Google")
+                            else tr("Based on your subscriptions and history", "In base a iscrizioni e video visti"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
                         )
                         if (!loggedIn) {
                             TextButton(onClick = onLogin) { Text(tr("Sign in", "Accedi")) }
@@ -219,22 +224,43 @@ fun HomeScreen(
 
 @Composable
 private fun Onboarding(onSearch: () -> Unit, onLogin: () -> Unit, modifier: Modifier) {
-    MessageView(
-        title = tr("Welcome to MauzTube", "Benvenuto su MauzTube"),
-        message = tr(
-            "Search for a video or subscribe to a channel: home will learn your taste, all on " +
-                "this phone. Or sign in with Google to get your account's feed.",
-            "Cerca un video o iscriviti a un canale: la home imparerà dai tuoi gusti, " +
-                "tutto sul telefono. Oppure accedi con Google per il feed del tuo account.",
-        ),
-        actionLabel = tr("Search for a video", "Cerca un video"),
-        onAction = onSearch,
-        modifier = modifier,
-    )
-    Row(modifier.fillMaxSize().padding(bottom = 48.dp), verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.Center) {
-        TextButton(onClick = onLogin) {
-            Text(tr("Sign in with Google", "Accedi con Google"), style = MaterialTheme.typography.labelLarge)
+    Column(
+        modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 32.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            Modifier.widthIn(max = 420.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                tr("Welcome to MauzTube", "Benvenuto su MauzTube"),
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                tr(
+                    "Search for a video or subscribe to a channel: home will learn your taste, all on " +
+                        "this phone. Or sign in with Google to get your account's feed.",
+                    "Cerca un video o iscriviti a un canale: la home imparerà dai tuoi gusti, " +
+                        "tutto sul telefono. Oppure accedi con Google per il feed del tuo account.",
+                ),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(20.dp))
+            FilledTonalButton(onClick = onSearch) {
+                Text(tr("Search for a video", "Cerca un video"))
+            }
+            Spacer(Modifier.height(4.dp))
+            TextButton(onClick = onLogin) {
+                Text(tr("Sign in with Google", "Accedi con Google"), style = MaterialTheme.typography.labelLarge)
+            }
         }
     }
 }
