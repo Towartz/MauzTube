@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -32,7 +34,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -101,7 +106,10 @@ class SettingsViewModel @Inject constructor(
 fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: SettingsViewModel = hiltViewModel()) {
     val s = vm.settings.collectAsStateWithLifecycle().value ?: return
     val loggedIn by vm.account.loggedIn.collectAsStateWithLifecycle()
+    val hasSession by vm.account.hasSession.collectAsStateWithLifecycle()
     var cookieDialog by remember { mutableStateOf(false) }
+    var exportCookieDialog by remember { mutableStateOf(false) }
+    var confirmLogout by remember { mutableStateOf(false) }
 
     // Lista "lazy" a elementi piccoli: durante lo scorrimento si compone una riga alla volta.
     LazyColumn(modifier, contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -143,13 +151,17 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
         item(key = "acc-row") {
             Column {
                 Text(
-                    if (loggedIn) tr("Connected: home and related videos are personalized.", "Connesso: home e correlati sono personalizzati.")
-                    else tr("Not connected: sign in to see your personalized recommendations.", "Non connesso: accedi per vedere i consigliati del tuo profilo."),
+                    when {
+                        loggedIn -> tr("Connected: home and related videos are personalized.", "Connesso: home e correlati sono personalizzati.")
+                        hasSession -> tr("Signed in (paused while incognito mode is on).", "Accesso effettuato (in pausa in modalità anonimo).")
+                        else -> tr("Not connected: sign in to see your personalized recommendations.", "Non connesso: accedi per vedere i consigliati del tuo profilo.")
+                    },
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
-                Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (loggedIn) {
-                        TextButton(onClick = { vm.logout() }) { Text(tr("Sign out", "Esci")) }
+                FlowRow(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (hasSession) {
+                        TextButton(onClick = { exportCookieDialog = true }) { Text(tr("Export cookies", "Esporta cookie")) }
+                        TextButton(onClick = { confirmLogout = true }) { Text(tr("Sign out", "Esci")) }
                     } else {
                         TextButton(onClick = onLogin) { Text(tr("Sign in with Google", "Accedi con Google")) }
                         TextButton(onClick = { cookieDialog = true }) { Text(tr("Import cookies", "Importa cookie")) }
@@ -188,11 +200,12 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
                     }
                 }
                 Row(
-                    Modifier.fillMaxWidth().clickable { toggle(!checked) }.padding(horizontal = 8.dp),
+                    Modifier.fillMaxWidth().clickable { toggle(!checked) }.padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(checked = checked, onCheckedChange = { toggle(it) })
-                    Column {
+                    Spacer(Modifier.width(4.dp))
+                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
                         Text(cat.label)
                         Text(cat.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -350,6 +363,7 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
     }
 
     if (cookieDialog) {
+        val context = androidx.compose.ui.platform.LocalContext.current
         var raw by remember { mutableStateOf("") }
         var error by remember { mutableStateOf(false) }
         AlertDialog(
@@ -376,6 +390,11 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
                         isError = error,
                         supportingText = { if (error) Text(tr("SAPISID cookie not found", "Cookie SAPISID non trovato")) },
                     )
+                    TextButton(onClick = {
+                        val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                        val pasted = cm?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                        if (pasted.isNotBlank()) { raw = pasted; error = false }
+                    }) { Text(tr("Paste from clipboard", "Incolla dagli appunti")) }
                 }
             },
             confirmButton = {
@@ -384,6 +403,113 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
                 }) { Text(tr("Import", "Importa")) }
             },
             dismissButton = { TextButton(onClick = { cookieDialog = false }) { Text(tr("Cancel", "Annulla")) } },
+        )
+    }
+
+    if (exportCookieDialog) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val scope = rememberCoroutineScope()
+        val exported = remember(exportCookieDialog) { vm.account.exportCookieHeader().orEmpty() }
+        var revealed by remember { mutableStateOf(false) }
+        val saveFileLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain"),
+        ) { uri ->
+            if (uri == null || exported.isEmpty()) return@rememberLauncherForActivityResult
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.use {
+                            it.write(exported.toByteArray(Charsets.UTF_8))
+                        } != null
+                    }.getOrDefault(false)
+                }
+                android.widget.Toast.makeText(
+                    context,
+                    if (ok) tr("Cookies saved", "Cookie salvati") else tr("Failed to save cookies", "Impossibile salvare i cookie"),
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                if (ok) exportCookieDialog = false
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { exportCookieDialog = false },
+            title = { Text(tr("Export YouTube cookies", "Esporta cookie di YouTube")) },
+            text = {
+                Column {
+                    Text(
+                        tr(
+                            "Keep this private: anyone with these cookies can access your signed-in YouTube/Google session.",
+                            "Tienilo privato: chiunque abbia questi cookie può accedere alla tua sessione YouTube/Google.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    if (exported.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = if (revealed) exported else "•".repeat(minOf(exported.length, 48)),
+                            onValueChange = {},
+                            readOnly = true,
+                            maxLines = 4,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { revealed = !revealed }) {
+                                Text(if (revealed) tr("Hide", "Nascondi") else tr("Show", "Mostra"))
+                            }
+                            TextButton(onClick = { saveFileLauncher.launch("youtube-cookies.txt") }) {
+                                Text(tr("Save file", "Salva file"))
+                            }
+                        }
+                    } else {
+                        Text(
+                            tr("No active session cookies found.", "Nessun cookie di sessione attivo trovato."),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = exported.isNotEmpty(),
+                    onClick = {
+                        val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                        val clip = android.content.ClipData.newPlainText("YouTube cookies", exported)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            clip.description.extras = android.os.PersistableBundle().apply {
+                                putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
+                            }
+                        }
+                        cm?.setPrimaryClip(clip)
+                        android.widget.Toast.makeText(
+                            context,
+                            tr("Cookies copied to clipboard", "Cookie copiati negli appunti"),
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                        exportCookieDialog = false
+                    },
+                ) { Text(tr("Copy", "Copia")) }
+            },
+            dismissButton = { TextButton(onClick = { exportCookieDialog = false }) { Text(tr("Close", "Chiudi")) } },
+        )
+    }
+
+    if (confirmLogout) {
+        AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text(tr("Sign out?", "Uscire dall'account?")) },
+            text = {
+                Text(tr(
+                    "Session cookies on this device will be cleared.",
+                    "I cookie di sessione su questo dispositivo verranno cancellati.",
+                ))
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.logout(); confirmLogout = false }) {
+                    Text(tr("Sign out", "Esci"))
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text(tr("Cancel", "Annulla")) } },
         )
     }
 }

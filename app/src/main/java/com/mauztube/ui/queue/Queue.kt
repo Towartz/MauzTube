@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -92,7 +93,8 @@ fun QueueBar(manager: PlaybackManager, onOpen: () -> Unit, modifier: Modifier = 
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        tr("Queue · ${queue.size} videos", "Coda · ${queue.size} video"),
+                        if (queue.size == 1) tr("Queue · 1 video", "Coda · 1 video")
+                        else tr("Queue · ${queue.size} videos", "Coda · ${queue.size} video"),
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Text(
@@ -187,6 +189,7 @@ private fun QueueRow(
                     maxLines = 1,
                 )
             }
+            Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(
