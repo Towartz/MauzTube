@@ -2,8 +2,10 @@ package com.mauztube.data.account
 
 import android.util.Log
 import android.webkit.CookieManager
+import android.webkit.WebStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import okhttp3.HttpUrl
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -54,11 +56,25 @@ class AccountManager @Inject constructor() {
 
     fun cookieHeader(): String? = cookies?.getCookie(YT_URL)?.takeIf { it.isNotBlank() }
 
-    /** Salva i Set-Cookie ricevuti da YouTube, così la sessione resta allineata. */
+    /** Esporta l'header Cookie della sessione attiva (null se non autenticato). */
+    fun exportCookieHeader(): String? = if (_hasSession.value) cookieHeader() else null
+
+    /** Salva i Set-Cookie ricevuti da YouTube, scartando intestazioni malformate o per altri domini. */
     fun storeResponseCookies(setCookies: List<String>) {
         val cm = cookies ?: return
-        setCookies.forEach { cm.setCookie(YT_URL, it) }
-        if (setCookies.isNotEmpty()) cm.flush()
+        var wrote = false
+        for (raw in setCookies) {
+            val clean = raw.replace("\r", "").replace("\n", "").trim()
+            if (clean.isEmpty() || '=' !in clean.substringBefore(';')) continue
+            val domain = clean.split(';').drop(1)
+                .map { it.trim() }
+                .firstOrNull { it.startsWith("domain=", ignoreCase = true) }
+                ?.substringAfter('=')?.trim()?.trimStart('.')?.lowercase()
+            if (domain != null && domain != "youtube.com" && !domain.endsWith(".youtube.com")) continue
+            cm.setCookie(YT_URL, clean)
+            wrote = true
+        }
+        if (wrote) cm.flush()
     }
 
     /** Header di autenticazione InnerTube, o mappa vuota se non loggato. */
@@ -85,13 +101,35 @@ class AccountManager @Inject constructor() {
     /**
      * Login alternativo per quando Google rifiuta il WebView: incolla l'header Cookie
      * copiato da un browser desktop (DevTools → Network → una richiesta a youtube.com).
+     * Valida prima la presenza di SAPISID/3PAPISID e pulisce i vecchi cookie solo a
+     * validazione riuscita, impostando Secure + HttpOnly per ridurre il rischio di furto.
      */
     fun importCookieHeader(raw: String): Boolean {
         val cm = cookies ?: return false
-        raw.removePrefix("Cookie:").split(';')
+        val sanitized = raw.replace("\r", " ").replace("\n", " ").trim()
+            .removePrefix("Cookie:").removePrefix("cookie:").trim()
+        val pairs = sanitized.split(';')
             .map { it.trim() }
-            .filter { '=' in it }
-            .forEach { cm.setCookie(YT_URL, "$it; Domain=.youtube.com; Path=/; Secure") }
+            .mapNotNull { part ->
+                val idx = part.indexOf('=')
+                if (idx <= 0) return@mapNotNull null
+                val name = part.substring(0, idx).trim()
+                val value = part.substring(idx + 1).trim()
+                if (!COOKIE_NAME.matches(name) || name.lowercase() in COOKIE_ATTRS) return@mapNotNull null
+                name to value
+            }
+        val hasAuth = pairs.any { (n, v) -> (n == SAPISID || n == SAPISID_3P) && v.isNotEmpty() }
+        if (!hasAuth) return false
+
+        cm.removeAllCookies(null)
+        pairs.forEach { (name, value) ->
+            val directive = if (name.startsWith("__Host-")) {
+                "$name=$value; Path=/; Secure; HttpOnly"
+            } else {
+                "$name=$value; Domain=.youtube.com; Path=/; Secure; HttpOnly"
+            }
+            cm.setCookie(YT_URL, directive)
+        }
         cm.flush()
         refresh()
         return _hasSession.value
@@ -100,6 +138,7 @@ class AccountManager @Inject constructor() {
     fun logout() {
         cookies?.removeAllCookies(null)
         cookies?.flush()
+        runCatching { WebStorage.getInstance().deleteAllData() }
         _hasSession.value = false
         _loggedIn.value = false
     }
@@ -120,5 +159,14 @@ class AccountManager @Inject constructor() {
         private const val SAPISID = "SAPISID"
         private const val SAPISID_1P = "__Secure-1PAPISID"
         private const val SAPISID_3P = "__Secure-3PAPISID"
+        private val COOKIE_NAME = Regex("""^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$""")
+        private val COOKIE_ATTRS = setOf("domain", "path", "expires", "max-age", "secure", "httponly", "samesite", "priority", "partitioned")
+        private val TRUSTED_SUFFIXES = listOf("youtube.com", "google.com", "googleapis.com", "googlevideo.com", "gstatic.com", "googleusercontent.com")
+
+        fun isTrustedGoogleUrl(url: HttpUrl?): Boolean {
+            if (url == null || url.scheme != "https") return false
+            val host = url.host.lowercase()
+            return TRUSTED_SUFFIXES.any { host == it || host.endsWith(".$it") }
+        }
     }
 }

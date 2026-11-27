@@ -2,8 +2,11 @@ package com.mauztube.ui.mycomments
 
 import android.annotation.SuppressLint
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.mauztube.data.account.AccountManager
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -147,7 +150,7 @@ fun AccountWebScreen(title: String, url: String, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, maxLines = 1) },
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "Indietro")) } },
             )
         },
@@ -161,14 +164,21 @@ fun AccountWebScreen(title: String, url: String, onBack: () -> Unit) {
                     WebView(ctx).apply {
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        @Suppress("DEPRECATION")
+                        settings.saveFormData = false
                         CookieManager.getInstance().setAcceptCookie(true)
                         webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                                !AccountManager.isTrustedGoogleUrl(request.url.toString().toHttpUrlOrNull())
+
                             override fun onPageFinished(view: WebView, url: String) { loading = false }
                         }
                         loadUrl(url)
                     }
                 },
-                onRelease = { it.destroy() },
+                onRelease = { it.stopLoading(); it.destroy() },
             )
         }
     }

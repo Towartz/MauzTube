@@ -5,8 +5,10 @@ import com.mauztube.util.tr
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -72,10 +74,17 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                         WebView(ctx).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
+                            settings.allowFileAccess = false
+                            settings.allowContentAccess = false
+                            @Suppress("DEPRECATION")
+                            settings.saveFormData = false
                             settings.userAgentString = CHROME_UA
                             CookieManager.getInstance().setAcceptCookie(true)
                             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                             webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                                    !AccountManager.isTrustedGoogleUrl(request.url.toString().toHttpUrlOrNull())
+
                                 override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                                     loading = true
                                 }
@@ -93,7 +102,7 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                             loadUrl(LOGIN_URL)
                         }
                     },
-                    onRelease = { it.destroy() },
+                    onRelease = { it.stopLoading(); it.destroy() },
                 )
             }
         }

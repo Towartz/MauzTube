@@ -14,6 +14,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.add
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -106,13 +107,16 @@ class InnerTubeClient @Inject constructor(
         post("playlist/delete") { put("playlistId", playlistId) }
     }
 
-    /** GET autenticato (ping di statistiche per la cronologia). */
+    /** GET autenticato (ping di statistiche per la cronologia), solo verso host Google/YouTube HTTPS. */
     suspend fun authenticatedGet(url: String) = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url)
+        val parsed = url.toHttpUrlOrNull()
+        if (!AccountManager.isTrustedGoogleUrl(parsed)) throw IOException("Blocked untrusted authenticated URL")
+        val request = Request.Builder().url(parsed!!)
             .header("User-Agent", NewPipeDownloader.USER_AGENT)
             .apply { account.authHeaders().forEach { (k, v) -> header(k, v) } }
             .build()
         http.newCall(request).execute().use { r ->
+            if (!AccountManager.isTrustedGoogleUrl(r.request.url)) throw IOException("Blocked untrusted redirect")
             account.storeResponseCookies(r.headers("Set-Cookie"))
             if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
         }
