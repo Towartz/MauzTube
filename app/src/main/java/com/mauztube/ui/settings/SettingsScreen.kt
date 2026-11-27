@@ -70,6 +70,7 @@ class SettingsViewModel @Inject constructor(
     private val playlists: com.mauztube.data.repository.PlaylistRepository,
 ) : ViewModel() {
     fun clearSearchHistory() = viewModelScope.launch(com.mauztube.util.SafeHandler) { searchHistory.clear() }
+    fun clearHidden() = set({ copy(hiddenVideos = emptySet(), hiddenChannels = emptySet()) }) { clearHidden() }
 
     /**
      * Stato mostrato: parte dal valore già in memoria e viene aggiornato SUBITO al tocco
@@ -322,6 +323,14 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
         item(key = "search-clear") {
             TextButton(onClick = { confirmClearSearch = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
                 Text(tr("Clear search history", "Cancella la cronologia delle ricerche"))
+            }
+        }
+        if (s.hiddenVideos.isNotEmpty() || s.hiddenChannels.isNotEmpty()) {
+            item(key = "hidden-clear") {
+                val count = s.hiddenVideos.size + s.hiddenChannels.size
+                TextButton(onClick = { vm.clearHidden() }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text(tr("Restore hidden videos & channels ($count)", "Ripristina video e canali nascosti ($count)"))
+                }
             }
         }
         divider("d-search")

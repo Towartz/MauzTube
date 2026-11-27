@@ -524,7 +524,18 @@ private fun Details(
             }
         }
         // YouTube a volte ripete un video tra i correlati: chiavi duplicate farebbero chiudere l'app.
-        items(d.related.distinctBy { it.id }, key = { "rel-" + it.id }) { video ->
+        val actions = com.mauztube.ui.components.LocalVideoActions.current
+        val hiddenVideos = actions?.hiddenVideos?.collectAsState()?.value ?: emptySet()
+        val hiddenChannels = actions?.hiddenChannels?.collectAsState()?.value ?: emptySet()
+        val visibleRelated = remember(d.related, hiddenVideos, hiddenChannels) {
+            d.related.distinctBy { it.id }.filterNot { v ->
+                v.id in hiddenVideos ||
+                    com.mauztube.data.prefs.AppSettings.channelKey(v.uploaderUrl, v.uploaderName).let {
+                        it.isNotBlank() && it in hiddenChannels
+                    }
+            }
+        }
+        items(visibleRelated, key = { "rel-" + it.id }) { video ->
             VideoCard(video, onClick = { VideoPreviews.put(video); onVideo(video.id) }, showQueueButton = true)
         }
     }

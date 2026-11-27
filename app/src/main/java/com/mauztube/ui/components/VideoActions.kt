@@ -23,9 +23,13 @@ import javax.inject.Inject
 /** Azioni disponibili su ogni video, fornite a tutte le card tramite CompositionLocal. */
 interface VideoActions {
     val watchLaterIds: StateFlow<Set<String>>
+    val hiddenVideos: StateFlow<Set<String>>
+    val hiddenChannels: StateFlow<Set<String>>
     fun toggleWatchLater(video: VideoItem)
     fun enqueue(video: VideoItem)
     fun saveToPlaylist(video: VideoItem)
+    fun hideVideo(video: VideoItem)
+    fun hideChannel(video: VideoItem)
     /** Prefetch "a riposo" dei video rimasti visibili (solo su rete non a consumo). */
     fun prefetchVisible(videoIds: List<String>)
 }
@@ -44,8 +48,26 @@ class AppViewModel @Inject constructor(
 ) : ViewModel(), VideoActions {
 
     override val watchLaterIds: StateFlow<Set<String>> = library.watchLaterIds
+    override val hiddenVideos: StateFlow<Set<String>> = kotlinx.coroutines.flow.MutableStateFlow(emptySet()).apply {
+        viewModelScope.launch { settings.settings.collect { value = it.hiddenVideos } }
+    }
+    override val hiddenChannels: StateFlow<Set<String>> = kotlinx.coroutines.flow.MutableStateFlow(emptySet()).apply {
+        viewModelScope.launch { settings.settings.collect { value = it.hiddenChannels } }
+    }
     override fun toggleWatchLater(video: VideoItem) = library.toggleWatchLater(video)
     override fun enqueue(video: VideoItem) = playback.enqueue(video)
+    override fun hideVideo(video: VideoItem) {
+        viewModelScope.launch(com.mauztube.util.SafeHandler) {
+            settings.hideVideo(video.id)
+            com.mauztube.util.Feedback.show(com.mauztube.util.tr("Video removed from suggestions", "Video rimosso dai suggerimenti"))
+        }
+    }
+    override fun hideChannel(video: VideoItem) {
+        viewModelScope.launch(com.mauztube.util.SafeHandler) {
+            settings.hideChannel(com.mauztube.data.prefs.AppSettings.channelKey(video.uploaderUrl, video.uploaderName))
+            com.mauztube.util.Feedback.show(com.mauztube.util.tr("Channel hidden from suggestions", "Canale nascosto dai suggerimenti"))
+        }
+    }
     override fun prefetchVisible(videoIds: List<String>) = youtube.prefetch(videoIds, max = 2)
 
     // ---- Primo avvio ----

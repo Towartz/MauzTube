@@ -245,6 +245,18 @@ fun VideoMenu(video: VideoItem) {
                     leadingIcon = { Icon(AppIcons.PlaylistAdd, null) },
                     onClick = { open = false; actions.saveToPlaylist(video) },
                 )
+                DropdownMenuItem(
+                    text = { Text(tr("Not interested", "Non mi interessa")) },
+                    leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Close, null) },
+                    onClick = { open = false; actions.hideVideo(video) },
+                )
+                if (video.uploaderName.isNotBlank() || video.uploaderUrl != null) {
+                    DropdownMenuItem(
+                        text = { Text(tr("Don't recommend channel", "Non consigliare canale")) },
+                        leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Clear, null) },
+                        onClick = { open = false; actions.hideChannel(video) },
+                    )
+                }
             }
             DropdownMenuItem(
                 text = { Text(tr("Share", "Condividi")) },
@@ -429,8 +441,23 @@ fun ContentList(
     header: (LazyListScope.() -> Unit)? = null,
     listState: LazyListState = rememberLazyListState(),
     onPlaylist: (com.mauztube.data.model.PlaylistItem) -> Unit = {},
+    filterHidden: Boolean = false,
 ) {
-    if (state.items.isEmpty()) {
+    val actions = LocalVideoActions.current
+    val hiddenVideos = if (filterHidden && actions != null) actions.hiddenVideos.collectAsState().value else emptySet()
+    val hiddenChannels = if (filterHidden && actions != null) actions.hiddenChannels.collectAsState().value else emptySet()
+    val items = remember(state.items, hiddenVideos, hiddenChannels, filterHidden) {
+        if (!filterHidden || (hiddenVideos.isEmpty() && hiddenChannels.isEmpty())) state.items
+        else state.items.filterNot { item ->
+            item is VideoItem && (
+                item.id in hiddenVideos ||
+                    com.mauztube.data.prefs.AppSettings.channelKey(item.uploaderUrl, item.uploaderName).let {
+                        it.isNotBlank() && it in hiddenChannels
+                    }
+                )
+        }
+    }
+    if (items.isEmpty()) {
         when {
             state.loading -> if (header != null) {
                 LazyColumn(modifier.fillMaxSize()) {
@@ -455,13 +482,12 @@ fun ContentList(
 
     // Prefetch "a riposo": se lo scroll si ferma e dei video restano visibili per 1,2 s,
     // vengono estratti in anticipo (max 2, solo su Wi-Fi): toccarli li apre subito.
-    val actions = LocalVideoActions.current
-    LaunchedEffect(listState.isScrollInProgress, state.items.size) {
+    LaunchedEffect(listState.isScrollInProgress, items.size) {
         if (listState.isScrollInProgress || actions == null) return@LaunchedEffect
         delay(1_200)
         val visible = listState.layoutInfo.visibleItemsInfo
             .filter { it.offset >= 0 && it.offset + it.size <= listState.layoutInfo.viewportEndOffset }
-            .mapNotNull { info -> state.items.firstOrNull { it.url == info.key } as? VideoItem }
+            .mapNotNull { info -> items.firstOrNull { it.url == info.key } as? VideoItem }
         if (visible.isNotEmpty()) actions.prefetchVisible(visible.map { it.id })
     }
     val nearEnd by remember {
@@ -470,14 +496,14 @@ fun ContentList(
             last >= listState.layoutInfo.totalItemsCount - 4
         }
     }
-    LaunchedEffect(nearEnd, state.canLoadMore, state.items.size) {
+    LaunchedEffect(nearEnd, state.canLoadMore, items.size) {
         if (nearEnd && state.canLoadMore && !state.loading && state.error == null) onLoadMore()
     }
 
     // I risultati compaiono in dissolvenza al posto dello scheletro di caricamento.
     LazyColumn(modifier.fillMaxSize().appearIn(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         header?.invoke(this)
-        items(state.items, key = { it.url }, contentType = {
+        items(items, key = { it.url }, contentType = {
             when (it) {
                 is VideoItem -> 0
                 is ChannelItem -> 1

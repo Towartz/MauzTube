@@ -68,6 +68,7 @@ class HomeViewModel @Inject constructor(
     private val recommendations: RecommendationRepository,
     private val local: LocalRecommender,
     private val youtube: YouTubeRepository,
+    private val settings: com.mauztube.data.prefs.SettingsRepository,
 ) : ViewModel() {
 
     val loggedIn: StateFlow<Boolean> = account.loggedIn
@@ -112,14 +113,17 @@ class HomeViewModel @Inject constructor(
      * visti, se servono a riempire, finiscono in fondo e mescolati.
      */
     private suspend fun accountFeedFresh(): Paged<VideoItem> {
+        val prefs = settings.current()
         val exclude = recentlyShown()
         var page = recommendations.home()
-        if (exclude.isEmpty()) return page
+        if (exclude.isEmpty() && prefs.hiddenVideos.isEmpty() && prefs.hiddenChannels.isEmpty()) return page
         val fresh = mutableListOf<VideoItem>()
         val repeated = mutableListOf<VideoItem>()
         var extra = 0
         while (true) {
-            page.items.forEach { if (it.id in exclude) repeated += it else fresh += it }
+            page.items
+                .filterNot { prefs.isHidden(it) }
+                .forEach { if (it.id in exclude) repeated += it else fresh += it }
             val next = page.loadNext
             if (fresh.size >= MIN_FRESH || next == null || extra++ >= 3) break
             page = next()
@@ -195,6 +199,7 @@ fun HomeScreen(
             onLoadMore = vm.feed::loadMore,
             onRetry = vm::refresh,
             listState = listState,
+            filterHidden = true,
             emptyMessage = if (source == HomeSource.ACCOUNT)
                 tr("No recommendations: your YouTube watch history is empty or paused.", "Nessun consiglio: la cronologia YouTube dell'account è vuota o in pausa.")
             else tr("Watch a few videos or subscribe to a channel: recommendations will start from there.", "Guarda qualche video o iscriviti a un canale: i consigli arriveranno da lì."),
