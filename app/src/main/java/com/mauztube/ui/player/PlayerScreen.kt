@@ -451,6 +451,44 @@ private fun Details(
                 }
             }
         }
+        if (d.chapters.isNotEmpty()) {
+            item(key = "chapters") {
+                Column(Modifier.padding(top = 8.dp)) {
+                    Text(
+                        tr("Chapters", "Capitoli"),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(d.chapters) { chapter ->
+                            Column(
+                                Modifier
+                                    .width(156.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { onSeekTo(chapter.startSeconds * 1000L) }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    Format.duration(chapter.startSeconds.toLong()),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    chapter.title,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item(key = "description") {
             if (d.description.isNotBlank()) {
                 Column(
@@ -576,7 +614,13 @@ private fun ChannelBar(
         Avatar(d.uploaderAvatarUrl, d.uploaderName, 40)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(d.uploaderName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(d.uploaderName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (d.uploaderVerified) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                }
+            }
             if (d.uploaderSubscriberCount >= 0) {
                 Text(
                     tr("${Format.count(d.uploaderSubscriberCount)} subscribers", "${Format.count(d.uploaderSubscriberCount)} iscritti"),
@@ -687,6 +731,17 @@ private fun DescriptionText(
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(top = 4.dp),
     )
+    if (expanded) {
+        val meta = listOfNotNull(d.category, d.licence).joinToString(" · ")
+        if (meta.isNotBlank()) {
+            Text(
+                meta,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
 }
 
 /** Parametro t= dei link YouTube: "125", "125s", "1h2m5s". */

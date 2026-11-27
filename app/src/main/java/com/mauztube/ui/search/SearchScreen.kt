@@ -59,6 +59,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
+enum class SearchFilter(val apiValue: String, val en: String, val it: String) {
+    ALL("all", "All", "Tutti"),
+    VIDEOS("videos", "Videos", "Video"),
+    CHANNELS("channels", "Channels", "Canali"),
+    PLAYLISTS("playlists", "Playlists", "Playlist"),
+}
+
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val repo: YouTubeRepository,
@@ -74,6 +81,8 @@ class SearchViewModel @Inject constructor(
 
 
     val query: StateFlow<String> = savedState.getStateFlow("query", "")
+    private val _filter = MutableStateFlow(SearchFilter.ALL)
+    val filter: StateFlow<SearchFilter> = _filter
     private val _controller = MutableStateFlow<PagedListController<ContentItem>?>(null)
     val controller: StateFlow<PagedListController<ContentItem>?> = _controller
 
@@ -83,11 +92,19 @@ class SearchViewModel @Inject constructor(
 
     fun onQueryChange(q: String) { savedState["query"] = q }
 
+    fun setFilter(f: SearchFilter) {
+        if (_filter.value != f) {
+            _filter.value = f
+            if (query.value.isNotBlank()) search()
+        }
+    }
+
     fun search() {
         val q = query.value.trim()
         if (q.isEmpty()) return
+        val f = _filter.value.apiValue
         viewModelScope.launch(com.mauztube.util.SafeHandler) { history.record(q) }
-        _controller.value = PagedListController(viewModelScope) { repo.search(q) }.also { it.refresh() }
+        _controller.value = PagedListController(viewModelScope) { repo.search(q, f) }.also { it.refresh() }
     }
 }
 
@@ -96,9 +113,11 @@ fun SearchScreen(
     onBack: () -> Unit,
     onVideo: (String) -> Unit,
     onChannel: (String) -> Unit,
+    onPlaylist: (com.mauztube.data.model.PlaylistItem) -> Unit = {},
     vm: SearchViewModel = hiltViewModel(),
 ) {
     val query by vm.query.collectAsStateWithLifecycle()
+    val filter by vm.filter.collectAsStateWithLifecycle()
     val controller by vm.controller.collectAsStateWithLifecycle()
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -168,6 +187,19 @@ fun SearchScreen(
             if (c == null || shown.isNotEmpty()) return@Column
         }
         val state by c.state.collectAsStateWithLifecycle(ListUiState())
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        ) {
+            items(SearchFilter.entries.size) { i ->
+                val f = SearchFilter.entries[i]
+                androidx.compose.material3.FilterChip(
+                    selected = filter == f,
+                    onClick = { vm.setFilter(f) },
+                    label = { Text(tr(f.en, f.it)) },
+                )
+            }
+        }
         ContentList(
             state = state,
             onVideo = { onVideo(it.id) },
@@ -175,6 +207,7 @@ fun SearchScreen(
             onLoadMore = c::loadMore,
             onRetry = c::refresh,
             emptyMessage = tr("No results", "Nessun risultato"),
+            onPlaylist = onPlaylist,
         )
     }
 }

@@ -297,6 +297,42 @@ fun ChannelRow(channel: ChannelItem, onClick: () -> Unit) {
     }
 }
 
+@Composable
+fun PlaylistRow(playlist: com.mauztube.data.model.PlaylistItem, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(128.dp).aspectRatio(16f / 9f).clip(ThumbShape).background(MaterialTheme.colorScheme.surfaceVariant)) {
+            AsyncImage(
+                model = playlist.thumbnailUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (playlist.streamCount >= 0) {
+                Text(
+                    tr("${playlist.streamCount} videos", "${playlist.streamCount} video"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.72f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(playlist.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            playlist.uploaderName?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
 // ---------------- Stati di caricamento ----------------
 
 /** Scheletro animato: dà subito la forma della pagina mentre i dati arrivano. */
@@ -392,6 +428,7 @@ fun ContentList(
     emptyMessage: String = tr("Nothing here", "Nessun contenuto"),
     header: (LazyListScope.() -> Unit)? = null,
     listState: LazyListState = rememberLazyListState(),
+    onPlaylist: (com.mauztube.data.model.PlaylistItem) -> Unit = {},
 ) {
     if (state.items.isEmpty()) {
         when {
@@ -435,10 +472,17 @@ fun ContentList(
     // I risultati compaiono in dissolvenza al posto dello scheletro di caricamento.
     LazyColumn(modifier.fillMaxSize().appearIn(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         header?.invoke(this)
-        items(state.items, key = { it.url }, contentType = { if (it is VideoItem) 0 else 1 }) { item ->
+        items(state.items, key = { it.url }, contentType = {
+            when (it) {
+                is VideoItem -> 0
+                is ChannelItem -> 1
+                is com.mauztube.data.model.PlaylistItem -> 2
+            }
+        }) { item ->
             when (item) {
                 is VideoItem -> VideoCard(item, onClick = { VideoPreviews.put(item); onVideo(item) })
                 is ChannelItem -> ChannelRow(item, onClick = { onChannel(item) })
+                is com.mauztube.data.model.PlaylistItem -> PlaylistRow(item, onClick = { onPlaylist(item) })
             }
         }
         if (state.loading) {

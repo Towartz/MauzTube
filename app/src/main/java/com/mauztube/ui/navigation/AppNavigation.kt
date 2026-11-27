@@ -385,7 +385,12 @@ fun AppNavigation(deepLinks: Flow<DeepLink>) {
                     composable<SettingsRoute> { SettingsScreen(onLogin = openLogin) }
                     composable<LoginRoute> { LoginScreen(onDone = { nav.popBackStack() }) }
                     composable<SearchRoute> {
-                        SearchScreen(onBack = { nav.popBackStack() }, onVideo = openVideo, onChannel = openChannel)
+                        SearchScreen(
+                            onBack = { nav.popBackStack() },
+                            onVideo = openVideo,
+                            onChannel = openChannel,
+                            onPlaylist = { nav.navigate(PlaylistRoute(com.mauztube.ui.playlists.KIND_PUBLIC, it.id, it.name)) },
+                        )
                     }
                     composable<ChannelRoute> {
                         ChannelScreen(onBack = { nav.popBackStack() }, onVideo = openVideo)

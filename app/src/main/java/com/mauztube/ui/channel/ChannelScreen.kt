@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,17 +67,27 @@ class ChannelViewModel @Inject constructor(
     private val _header = MutableStateFlow<ChannelDetails?>(null)
     val header: StateFlow<ChannelDetails?> = _header
 
+    private val _tab = MutableStateFlow("videos")
+    val tab: StateFlow<String> = _tab
+
     val subscribed: StateFlow<Boolean> = subscriptions.isSubscribed(url)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    // Il primo caricamento recupera intestazione + prima pagina della tab "Video".
+    // Il primo caricamento recupera intestazione + prima pagina della tab selezionata.
     val videos = PagedListController<VideoItem>(viewModelScope) {
-        val details = repo.channel(url)
+        val details = repo.channel(url, _tab.value)
         _header.value = details
         Paged(details.videos.items, details.videos.loadNext)
     }
 
     init { videos.refresh() }
+
+    fun selectTab(newTab: String) {
+        if (_tab.value != newTab) {
+            _tab.value = newTab
+            videos.refresh()
+        }
+    }
 
     fun toggleSubscription() {
         val h = _header.value ?: return
@@ -95,6 +107,7 @@ fun ChannelScreen(
 ) {
     val header by vm.header.collectAsStateWithLifecycle()
     val subscribed by vm.subscribed.collectAsStateWithLifecycle()
+    val selectedTab by vm.tab.collectAsStateWithLifecycle()
     val state by vm.videos.state.collectAsStateWithLifecycle()
 
     Scaffold(
@@ -119,7 +132,7 @@ fun ChannelScreen(
             header = header?.let { h ->
                 {
                     item(key = "header") {
-                        ChannelHeader(h, subscribed, vm::toggleSubscription)
+                        ChannelHeader(h, subscribed, selectedTab, vm::selectTab, vm::toggleSubscription)
                     }
                 }
             },
@@ -128,7 +141,13 @@ fun ChannelScreen(
 }
 
 @Composable
-private fun ChannelHeader(h: ChannelDetails, subscribed: Boolean, onToggle: () -> Unit) {
+private fun ChannelHeader(
+    h: ChannelDetails,
+    subscribed: Boolean,
+    selectedTab: String,
+    onSelectTab: (String) -> Unit,
+    onToggle: () -> Unit,
+) {
     Column {
         if (h.bannerUrl != null) {
             AsyncImage(
@@ -142,7 +161,13 @@ private fun ChannelHeader(h: ChannelDetails, subscribed: Boolean, onToggle: () -
             Avatar(h.avatarUrl, h.name, 64)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(h.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(h.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (h.verified) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 if (h.subscriberCount >= 0) {
                     Text(tr("${Format.count(h.subscriberCount)} subscribers", "${Format.count(h.subscriberCount)} iscritti"), style = MaterialTheme.typography.bodySmall)
                 }
@@ -150,6 +175,23 @@ private fun ChannelHeader(h: ChannelDetails, subscribed: Boolean, onToggle: () -
             Spacer(Modifier.width(8.dp))
             if (subscribed) OutlinedButton(onClick = onToggle) { Text(tr("Subscribed", "Iscritto"), maxLines = 1) }
             else Button(onClick = onToggle) { Text(tr("Subscribe", "Iscriviti"), maxLines = 1) }
+        }
+        if (h.hasLivestreams) {
+            Row(
+                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = selectedTab == "videos",
+                    onClick = { onSelectTab("videos") },
+                    label = { Text(tr("Videos", "Video")) },
+                )
+                FilterChip(
+                    selected = selectedTab == "livestreams",
+                    onClick = { onSelectTab("livestreams") },
+                    label = { Text(tr("Livestreams", "Dal vivo")) },
+                )
+            }
         }
     }
 }
