@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextField
@@ -83,14 +84,29 @@ class SearchViewModel @Inject constructor(
     val query: StateFlow<String> = savedState.getStateFlow("query", "")
     private val _filter = MutableStateFlow(SearchFilter.ALL)
     val filter: StateFlow<SearchFilter> = _filter
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    val suggestions: StateFlow<List<String>> = _suggestions
     private val _controller = MutableStateFlow<PagedListController<ContentItem>?>(null)
     val controller: StateFlow<PagedListController<ContentItem>?> = _controller
+    private var suggestJob: kotlinx.coroutines.Job? = null
 
     init {
         if (query.value.isNotBlank()) search()
     }
 
-    fun onQueryChange(q: String) { savedState["query"] = q }
+    fun onQueryChange(q: String) {
+        savedState["query"] = q
+        suggestJob?.cancel()
+        val trimmed = q.trim()
+        if (trimmed.isEmpty()) {
+            _suggestions.value = emptyList()
+            return
+        }
+        suggestJob = viewModelScope.launch(com.mauztube.util.SafeHandler) {
+            kotlinx.coroutines.delay(200)
+            _suggestions.value = repo.suggestions(trimmed).take(8)
+        }
+    }
 
     fun setFilter(f: SearchFilter) {
         if (_filter.value != f) {
@@ -123,6 +139,7 @@ fun SearchScreen(
     val focusManager = LocalFocusManager.current
 
     val recent by vm.recent.collectAsStateWithLifecycle()
+    val suggestions by vm.suggestions.collectAsStateWithLifecycle()
     var focused by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { if (controller == null) focus.requestFocus() }
@@ -166,11 +183,13 @@ fun SearchScreen(
             keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); vm.search() }),
         )
         val c = controller
-        // Ricerche recenti: mentre si scrive (filtrate) o prima della prima ricerca.
+        // Ricerche recenti e suggerimenti YouTube: mentre si scrive o prima della prima ricerca.
         if (focused || c == null) {
-            val shown = if (query.isBlank()) recent else recent.filter { it.contains(query.trim(), ignoreCase = true) && it != query.trim() }
+            val trimmed = query.trim()
+            val shown = if (trimmed.isEmpty()) recent else recent.filter { it.contains(trimmed, ignoreCase = true) && it != trimmed }
+            val extraSuggestions = if (trimmed.isEmpty()) emptyList() else suggestions.filter { it !in shown && it != trimmed }
             androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth()) {
-                items(shown.size, key = { shown[it] }) { i ->
+                items(shown.size, key = { "rec-" + shown[it] }) { i ->
                     val q = shown[i]
                     Row(
                         Modifier.animateItem(fadeInSpec = tween(Motion.FAST), fadeOutSpec = tween(Motion.FAST))
@@ -183,8 +202,20 @@ fun SearchScreen(
                         IconButton(onClick = { vm.removeRecent(q) }) { Icon(Icons.Default.Clear, tr("Remove", "Rimuovi")) }
                     }
                 }
+                items(extraSuggestions.size, key = { "sug-" + extraSuggestions[it] }) { i ->
+                    val q = extraSuggestions[i]
+                    Row(
+                        Modifier.animateItem(fadeInSpec = tween(Motion.FAST), fadeOutSpec = tween(Motion.FAST))
+                            .fillMaxWidth().clickable { vm.onQueryChange(q); focusManager.clearFocus(); vm.search() }
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(q, modifier = Modifier.weight(1f).padding(horizontal = 16.dp), maxLines = 1)
+                    }
+                }
             }
-            if (c == null || shown.isNotEmpty()) return@Column
+            if (c == null || shown.isNotEmpty() || extraSuggestions.isNotEmpty()) return@Column
         }
         val state by c.state.collectAsStateWithLifecycle(ListUiState())
         androidx.compose.foundation.lazy.LazyRow(

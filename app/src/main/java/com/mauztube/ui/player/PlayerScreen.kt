@@ -472,6 +472,18 @@ private fun Details(
                                     .clickable { onSeekTo(chapter.startSeconds * 1000L) }
                                     .padding(horizontal = 10.dp, vertical = 8.dp)
                             ) {
+                                chapter.previewUrl?.let { preview ->
+                                    coil3.compose.AsyncImage(
+                                        model = preview,
+                                        contentDescription = null,
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(16f / 9f)
+                                            .padding(bottom = 6.dp)
+                                            .clip(RoundedCornerShape(6.dp)),
+                                    )
+                                }
                                 Text(
                                     Format.duration(chapter.startSeconds.toLong()),
                                     style = MaterialTheme.typography.labelSmall,
@@ -525,8 +537,8 @@ private fun Details(
         }
         // YouTube a volte ripete un video tra i correlati: chiavi duplicate farebbero chiudere l'app.
         val actions = com.mauztube.ui.components.LocalVideoActions.current
-        val hiddenVideos = actions?.hiddenVideos?.collectAsState()?.value ?: emptySet()
-        val hiddenChannels = actions?.hiddenChannels?.collectAsState()?.value ?: emptySet()
+        val hiddenVideos by (actions?.hiddenVideos ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
+        val hiddenChannels by (actions?.hiddenChannels ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
         val visibleRelated = remember(d.related, hiddenVideos, hiddenChannels) {
             d.related.distinctBy { it.id }.filterNot { v ->
                 v.id in hiddenVideos ||
@@ -571,6 +583,32 @@ private fun FullscreenInfo(
         item(key = "channel") { ChannelBar(d, subscribed, onToggleSubscribe, onChannel) }
         item(key = "rating") {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { RatingPill(rating, likes, dislikes, onRate) }
+        }
+        if (d.chapters.isNotEmpty()) {
+            item(key = "fs-chapters") {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(d.chapters) { chapter ->
+                        Column(
+                            Modifier
+                                .width(140.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { onSeekTo(chapter.startSeconds * 1000L) }
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                Format.duration(chapter.startSeconds.toLong()),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(chapter.title, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
         }
         if (d.description.isNotBlank()) {
             item(key = "description") {
@@ -762,6 +800,24 @@ private fun DescriptionText(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
+        }
+        d.metaInfo.forEach { box ->
+            Column(
+                Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable(enabled = box.url != null) { box.url?.let { runCatching { uriHandler.openUri(it) } } }
+                    .padding(10.dp)
+            ) {
+                if (box.title.isNotBlank()) {
+                    Text(box.title, style = MaterialTheme.typography.labelMedium)
+                }
+                if (box.content.isNotBlank()) {
+                    Text(box.content, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }

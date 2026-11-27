@@ -201,21 +201,27 @@ private fun ChannelHeader(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             )
         }
-        if (h.hasLivestreams) {
-            Row(
-                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        val tabs = h.availableTabs.ifEmpty { if (h.hasLivestreams) listOf("videos", "livestreams") else emptyList() }
+        if (tabs.size > 1) {
+            androidx.compose.foundation.lazy.LazyRow(
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
             ) {
-                FilterChip(
-                    selected = selectedTab == "videos",
-                    onClick = { onSelectTab("videos") },
-                    label = { Text(tr("Videos", "Video")) },
-                )
-                FilterChip(
-                    selected = selectedTab == "livestreams",
-                    onClick = { onSelectTab("livestreams") },
-                    label = { Text(tr("Livestreams", "Dal vivo")) },
-                )
+                items(tabs.size) { i ->
+                    val t = tabs[i]
+                    val label = when (t) {
+                        "videos" -> tr("Videos", "Video")
+                        "livestreams" -> tr("Livestreams", "Dal vivo")
+                        "podcasts" -> tr("Podcasts", "Podcast")
+                        "courses" -> tr("Courses", "Corsi")
+                        else -> t.replaceFirstChar { it.uppercase() }
+                    }
+                    FilterChip(
+                        selected = selectedTab == t,
+                        onClick = { onSelectTab(t) },
+                        label = { Text(label) },
+                    )
+                }
             }
         }
     }
