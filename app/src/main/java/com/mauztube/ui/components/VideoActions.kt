@@ -48,10 +48,10 @@ class AppViewModel @Inject constructor(
 ) : ViewModel(), VideoActions {
 
     override val watchLaterIds: StateFlow<Set<String>> = library.watchLaterIds
-    override val hiddenVideos: StateFlow<Set<String>> = kotlinx.coroutines.flow.MutableStateFlow(emptySet()).apply {
+    override val hiddenVideos: StateFlow<Set<String>> = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet()).apply {
         viewModelScope.launch { settings.settings.collect { value = it.hiddenVideos } }
     }
-    override val hiddenChannels: StateFlow<Set<String>> = kotlinx.coroutines.flow.MutableStateFlow(emptySet()).apply {
+    override val hiddenChannels: StateFlow<Set<String>> = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet()).apply {
         viewModelScope.launch { settings.settings.collect { value = it.hiddenChannels } }
     }
     override fun toggleWatchLater(video: VideoItem) = library.toggleWatchLater(video)

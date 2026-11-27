@@ -386,8 +386,8 @@ private fun Details(
     val d = s.details
     var expanded by remember { mutableStateOf(false) }
     val actions = com.mauztube.ui.components.LocalVideoActions.current
-    val hiddenVideos by (actions?.hiddenVideos ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
-    val hiddenChannels by (actions?.hiddenChannels ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
+    val hiddenVideos = if (actions != null) actions.hiddenVideos.collectAsStateWithLifecycle().value else emptySet()
+    val hiddenChannels = if (actions != null) actions.hiddenChannels.collectAsStateWithLifecycle().value else emptySet()
     val visibleRelated = remember(d.related, hiddenVideos, hiddenChannels) {
         d.related.distinctBy { it.id }.filterNot { v ->
             v.id in hiddenVideos ||
