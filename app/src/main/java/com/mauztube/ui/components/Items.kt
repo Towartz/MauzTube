@@ -433,7 +433,7 @@ fun ContentList(
     }
 
     // I risultati compaiono in dissolvenza al posto dello scheletro di caricamento.
-    LazyColumn(modifier.fillMaxSize().appearIn(), state = listState, contentPadding = PaddingValues(bottom = 16.dp)) {
+    LazyColumn(modifier.fillMaxSize().appearIn(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         header?.invoke(this)
         items(state.items, key = { it.url }, contentType = { if (it is VideoItem) 0 else 1 }) { item ->
             when (item) {

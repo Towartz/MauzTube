@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,8 +30,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +76,24 @@ class DownloadsViewModel @Inject constructor(private val repo: DownloadRepositor
 fun DownloadsScreen(onBack: () -> Unit, vm: DownloadsViewModel = hiltViewModel()) {
     val list = vm.downloads.collectAsStateWithLifecycle().value
     val context = LocalContext.current
+    var confirmDelete by remember { mutableStateOf<DownloadEntity?>(null) }
+    confirmDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(tr("Delete download?", "Eliminare il download?")) },
+            text = { Text(target.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            confirmButton = {
+                TextButton(onClick = { vm.delete(target); confirmDelete = null }) {
+                    Text(tr("Delete", "Elimina"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) {
+                    Text(tr("Cancel", "Annulla"))
+                }
+            },
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -85,7 +110,7 @@ fun DownloadsScreen(onBack: () -> Unit, vm: DownloadsViewModel = hiltViewModel()
                 Modifier.padding(padding),
                 title = tr("No downloads", "Nessun download"),
             )
-            else -> LazyColumn(Modifier.padding(padding).fillMaxSize()) {
+            else -> LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 88.dp)) {
                 items(list, key = { it.id }) { d ->
                     DownloadRow(
                         d,
@@ -108,7 +133,7 @@ fun DownloadsScreen(onBack: () -> Unit, vm: DownloadsViewModel = hiltViewModel()
                             }
                         },
                         onRetry = { vm.retry(d) },
-                        onDelete = { vm.delete(d) },
+                        onDelete = { confirmDelete = d },
                     )
                 }
             }

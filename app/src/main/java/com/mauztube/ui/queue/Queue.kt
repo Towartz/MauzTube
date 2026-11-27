@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -115,6 +116,24 @@ fun QueueBar(manager: PlaybackManager, onOpen: () -> Unit, modifier: Modifier = 
 @Composable
 fun QueueSheet(manager: PlaybackManager, onDismiss: () -> Unit) {
     val queue by manager.queue.collectAsStateWithLifecycle()
+    var confirmClear by remember { mutableStateOf(false) }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(tr("Clear queue?", "Svuotare la coda?")) },
+            text = { Text(tr("Remove all ${queue.size} queued videos.", "Rimuovere tutti i ${queue.size} video in coda.")) },
+            confirmButton = {
+                TextButton(onClick = { manager.clearQueue(); confirmClear = false }) {
+                    Text(tr("Clear", "Svuota"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) {
+                    Text(tr("Cancel", "Annulla"))
+                }
+            },
+        )
+    }
     // A coda esaurita il pannello si chiude da solo.
     LaunchedEffect(queue.isEmpty()) { if (queue.isEmpty()) onDismiss() }
     ModalBottomSheet(
@@ -128,7 +147,7 @@ fun QueueSheet(manager: PlaybackManager, onDismiss: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(tr("Queue", "Coda"), style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = { manager.clearQueue() }) { Text(tr("Clear", "Svuota")) }
+                TextButton(onClick = { confirmClear = true }) { Text(tr("Clear", "Svuota")) }
             }
             Text(
                 tr("Tap a video to play it now, move it or remove it.", "Tocca un video per riprodurlo subito, spostarlo o toglierlo."),

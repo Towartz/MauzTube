@@ -110,9 +110,27 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
     var cookieDialog by remember { mutableStateOf(false) }
     var exportCookieDialog by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
+    var confirmClearSearch by remember { mutableStateOf(false) }
+    if (confirmClearSearch) {
+        AlertDialog(
+            onDismissRequest = { confirmClearSearch = false },
+            title = { Text(tr("Clear search history?", "Cancellare la cronologia delle ricerche?")) },
+            text = { Text(tr("All saved search queries on this device will be removed.", "Tutte le ricerche salvate su questo dispositivo verranno rimosse.")) },
+            confirmButton = {
+                TextButton(onClick = { vm.clearSearchHistory(); confirmClearSearch = false }) {
+                    Text(tr("Clear", "Cancella"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearSearch = false }) {
+                    Text(tr("Cancel", "Annulla"))
+                }
+            },
+        )
+    }
 
     // Lista "lazy" a elementi piccoli: durante lo scorrimento si compone una riga alla volta.
-    LazyColumn(modifier, contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(modifier, contentPadding = PaddingValues(bottom = 88.dp)) {
         item(key = "lang") { Section(tr("Language", "Lingua")) }
         item(key = "lang-sel") { com.mauztube.ui.onboarding.LanguageSelector(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
         divider("d-lang")
@@ -302,7 +320,7 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
             ) { v -> vm.set({ copy(saveSearchHistory = v) }) { setSaveSearchHistory(v) } }
         }
         item(key = "search-clear") {
-            TextButton(onClick = { vm.clearSearchHistory() }, modifier = Modifier.padding(horizontal = 8.dp)) {
+            TextButton(onClick = { confirmClearSearch = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
                 Text(tr("Clear search history", "Cancella la cronologia delle ricerche"))
             }
         }
