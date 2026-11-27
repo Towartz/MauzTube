@@ -72,6 +72,11 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     var pendingAccount by remember { mutableStateOf<String?>(null) }
 
     fun loadAuthUrl(authUrl: String) {
+        if (!AccountManager.isTrustedGoogleUrl(authUrl.toHttpUrlOrNull())) {
+            loading = false
+            Feedback.show(tr("Untrusted login URL blocked", "URL di accesso non attendibile bloccato"))
+            return
+        }
         loading = true
         CookieManager.getInstance().removeAllCookies {
             webViewRef?.loadUrl(authUrl)
@@ -81,7 +86,10 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     val consentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         val acct = pendingAccount
         val directUrl = res.data?.getStringExtra(AndroidAccountManager.KEY_AUTHTOKEN)
-        if (!directUrl.isNullOrBlank() && directUrl.startsWith("http") && "WILL_NOT_SIGN_IN" !in directUrl) {
+        if (!directUrl.isNullOrBlank() &&
+            AccountManager.isTrustedGoogleUrl(directUrl.toHttpUrlOrNull()) &&
+            "WILL_NOT_SIGN_IN" !in directUrl
+        ) {
             loadAuthUrl(directUrl)
             return@rememberLauncherForActivityResult
         }

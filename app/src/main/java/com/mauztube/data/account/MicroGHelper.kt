@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.net.URLEncoder
 
 /**
@@ -75,7 +76,10 @@ object MicroGHelper {
                     return@runCatching WebLoginResult.NeedConsent(consentIntent)
                 }
                 val tokenUrl = bundle.getString(AndroidAccountManager.KEY_AUTHTOKEN)
-                if (!tokenUrl.isNullOrBlank() && tokenUrl.startsWith("http") && "WILL_NOT_SIGN_IN" !in tokenUrl) {
+                if (!tokenUrl.isNullOrBlank() &&
+                    AccountManager.isTrustedGoogleUrl(tokenUrl.toHttpUrlOrNull()) &&
+                    "WILL_NOT_SIGN_IN" !in tokenUrl
+                ) {
                     WebLoginResult.Url(tokenUrl)
                 } else {
                     val err = bundle.getString(AndroidAccountManager.KEY_ERROR_MESSAGE)
