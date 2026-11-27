@@ -71,10 +71,22 @@ data class AppSettings(
     /** A fine video parte da solo il primo consigliato (disattivata di default). */
     val autoplayNext: Boolean = false,
     val saveSearchHistory: Boolean = true,
+    val hiddenVideos: Set<String> = emptySet(),
+    val hiddenChannels: Set<String> = emptySet(),
 ) {
+    fun isHidden(video: com.mauztube.data.model.VideoItem): Boolean {
+        if (video.id in hiddenVideos) return true
+        val key = channelKey(video.uploaderUrl, video.uploaderName)
+        return key.isNotBlank() && key in hiddenChannels
+    }
+
     companion object {
         const val DEFAULT_SPONSOR_SERVER = "https://sponsor.ajay.app"
         val QUALITY_OPTIONS = listOf(144, 240, 360, 480, 720, 1080, 1440, 2160)
+
+        fun channelKey(uploaderUrl: String?, uploaderName: String): String =
+            uploaderUrl?.trim()?.trimEnd('/')?.lowercase()?.takeIf { it.isNotBlank() }
+                ?: uploaderName.trim().lowercase()
     }
 }
 
@@ -115,6 +127,8 @@ class SettingsRepository @Inject constructor(
         val AUTOPLAY = booleanPreferencesKey("autoplay_next")
         val SEARCH_HISTORY = booleanPreferencesKey("save_search_history")
         val SUBS_MERGED = booleanPreferencesKey("subscriptions_merged")
+        val HIDDEN_VIDEOS = stringSetPreferencesKey("hidden_videos")
+        val HIDDEN_CHANNELS = stringSetPreferencesKey("hidden_channels")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -139,6 +153,8 @@ class SettingsRepository @Inject constructor(
             showDislikes = p[Keys.SHOW_DISLIKES] ?: d.showDislikes,
             autoplayNext = p[Keys.AUTOPLAY] ?: d.autoplayNext,
             saveSearchHistory = p[Keys.SEARCH_HISTORY] ?: d.saveSearchHistory,
+            hiddenVideos = p[Keys.HIDDEN_VIDEOS] ?: d.hiddenVideos,
+            hiddenChannels = p[Keys.HIDDEN_CHANNELS] ?: d.hiddenChannels,
         )
     }.distinctUntilChanged()
 
@@ -178,6 +194,21 @@ class SettingsRepository @Inject constructor(
     suspend fun setAggressiveShorts(v: Boolean) = edit { it[Keys.AGGRESSIVE_SHORTS] = v }
     suspend fun setSubtitlesAuto(v: Boolean) = edit { it[Keys.SUBS_AUTO] = v }
     suspend fun setReportWatchHistory(v: Boolean) = edit { it[Keys.REPORT_HISTORY] = v }
+
+    suspend fun hideVideo(videoId: String) = edit {
+        it[Keys.HIDDEN_VIDEOS] = (it[Keys.HIDDEN_VIDEOS] ?: emptySet()) + videoId
+    }
+
+    suspend fun hideChannel(channelKey: String) = edit {
+        if (channelKey.isNotBlank()) {
+            it[Keys.HIDDEN_CHANNELS] = (it[Keys.HIDDEN_CHANNELS] ?: emptySet()) + channelKey
+        }
+    }
+
+    suspend fun clearHidden() = edit {
+        it.remove(Keys.HIDDEN_VIDEOS)
+        it.remove(Keys.HIDDEN_CHANNELS)
+    }
 
     // --- Primo avvio e sincronizzazione ---
 

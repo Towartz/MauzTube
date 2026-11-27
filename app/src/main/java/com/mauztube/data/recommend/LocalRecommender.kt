@@ -3,6 +3,7 @@ package com.mauztube.data.recommend
 import com.mauztube.data.local.PlaybackDao
 import com.mauztube.data.local.SubscriptionDao
 import com.mauztube.data.model.VideoItem
+import com.mauztube.data.prefs.SettingsRepository
 import com.mauztube.data.repository.ChannelFeedRepository
 import com.mauztube.data.repository.VideoCacheRepository
 import com.mauztube.data.repository.YouTubeRepository
@@ -38,6 +39,7 @@ class LocalRecommender @Inject constructor(
     private val cache: VideoCacheRepository,
     private val channelFeed: ChannelFeedRepository,
     private val youtube: YouTubeRepository,
+    private val settings: SettingsRepository,
 ) {
     suspend fun hasSignals(): Boolean =
         playbackDao.recent(1).isNotEmpty() || subscriptionDao.all().isNotEmpty()
@@ -50,8 +52,10 @@ class LocalRecommender @Inject constructor(
         val history = playbackDao.recent(HISTORY_WINDOW)
         val subs = subscriptionDao.all()
         if (history.isEmpty() && subs.isEmpty()) return emptyList()
+        val prefs = settings.current()
         val watched = playbackDao.allIds().toSet()
         val affinity = affinity(history.map { it.uploaderUrl }, subs.map { it.channelUrl })
+            .filterKeys { url -> url.trim().trimEnd('/').lowercase() !in prefs.hiddenChannels }
 
         val recent = history.take(RELATED_SOURCES).map { it.videoId }
         val related = cache.related(recent)
@@ -63,7 +67,7 @@ class LocalRecommender @Inject constructor(
             val scores = HashMap<String, Double>()
             val videos = HashMap<String, VideoItem>()
             fun add(v: VideoItem, score: Double) {
-                if (v.id in watched) return
+                if (v.id in watched || prefs.isHidden(v)) return
                 videos.putIfAbsent(v.id, v)
                 scores[v.id] = (scores[v.id] ?: 0.0) + score
             }

@@ -325,7 +325,9 @@ class YouTubeRepository @Inject constructor(
                 dashMpdUrl = info.dashMpdUrl?.takeIf { it.isNotBlank() },
             ),
             subtitles = selectSubtitles(info.subtitles.map(ContentMapper::subtitleOption)),
-            related = ContentMapper.mapVideos(info.relatedItems, aggressive()),
+            related = settings.current().let { prefs ->
+                ContentMapper.mapVideos(info.relatedItems, aggressive()).filterNot { prefs.isHidden(it) }
+            },
             storyboard = pickStoryboard(info.previewFrames),
             chapters = info.streamSegments.map(ContentMapper::chapter),
             uploaderVerified = info.isUploaderVerified,
