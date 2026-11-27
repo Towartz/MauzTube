@@ -4,8 +4,10 @@ import com.mauztube.util.tr
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -140,8 +142,16 @@ fun PlaylistDetailScreen(
     ) { padding ->
         val actionsRow: @Composable () -> Unit = {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = vm::playAll) { Icon(Icons.Default.PlayArrow, null); Text(tr("Play all", "Riproduci tutto")) }
-                FilledTonalButton(onClick = vm::queueAll) { Icon(AppIcons.AddToQueue, null); Text(tr(" Queue all", " In coda")) }
+                Button(onClick = vm::playAll) {
+                    Icon(Icons.Default.PlayArrow, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("Play all", "Riproduci tutto"))
+                }
+                FilledTonalButton(onClick = vm::queueAll) {
+                    Icon(AppIcons.AddToQueue, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("Queue all", "In coda"))
+                }
             }
         }
         if (!editable) {

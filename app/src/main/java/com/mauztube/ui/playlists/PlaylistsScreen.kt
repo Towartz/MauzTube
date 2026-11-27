@@ -147,6 +147,7 @@ fun PlaylistsScreen(
                 Text(tr("Your playlists", "Le tue playlist"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 FilledTonalButton(onClick = { creating = true }) {
                     Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(6.dp))
                     Text(tr("New", "Nuova"))
                 }
             }

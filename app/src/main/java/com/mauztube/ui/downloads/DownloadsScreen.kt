@@ -3,6 +3,7 @@ package com.mauztube.ui.downloads
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +46,7 @@ import com.mauztube.data.local.DownloadEntity
 import com.mauztube.download.DownloadKind
 import com.mauztube.download.DownloadRepository
 import com.mauztube.download.DownloadRepository.Status
+import com.mauztube.ui.components.LoadingView
 import com.mauztube.ui.components.MessageView
 import com.mauztube.util.tr
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -78,7 +79,7 @@ fun DownloadsScreen(onBack: () -> Unit, vm: DownloadsViewModel = hiltViewModel()
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
     ) { padding ->
         when {
-            list == null -> Unit
+            list == null -> LoadingView(Modifier.padding(padding))
             list.isEmpty() -> MessageView(
                 tr("Use \"Download\" under a video to save it as MP4 or MP3.", "Usa \"Scarica\" sotto un video per salvarlo in MP4 o MP3."),
                 Modifier.padding(padding),
@@ -117,8 +118,13 @@ fun DownloadsScreen(onBack: () -> Unit, vm: DownloadsViewModel = hiltViewModel()
 
 @Composable
 private fun DownloadRow(d: DownloadEntity, onOpen: () -> Unit, onShare: () -> Unit, onRetry: () -> Unit, onDelete: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(112.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(enabled = d.status == Status.DONE, onClick = onOpen)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(104.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
             AsyncImage(d.thumbnailUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Spacer(Modifier.width(12.dp))
@@ -131,16 +137,13 @@ private fun DownloadRow(d: DownloadEntity, onOpen: () -> Unit, onShare: () -> Un
                 Status.DONE -> if (d.sizeBytes > 0) String.format(Locale.ROOT, "%.1f MB", d.sizeBytes / 1_048_576.0) else tr("Done", "Completato")
                 else -> tr("Failed", "Non riuscito") + (d.error?.let { ": $it" } ?: "")
             }
-            Text("$format · $status", style = MaterialTheme.typography.bodySmall, color = if (d.status == Status.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            Text("$format · $status", style = MaterialTheme.typography.bodySmall, color = if (d.status == Status.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (d.status == Status.RUNNING) {
                 LinearProgressIndicator(progress = { d.progress }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
             }
         }
         when (d.status) {
-            Status.DONE -> {
-                IconButton(onClick = onOpen) { Icon(Icons.Default.PlayArrow, tr("Open", "Apri")) }
-                IconButton(onClick = onShare) { Icon(Icons.Default.Share, tr("Share", "Condividi")) }
-            }
+            Status.DONE -> IconButton(onClick = onShare) { Icon(Icons.Default.Share, tr("Share", "Condividi")) }
             Status.FAILED -> IconButton(onClick = onRetry) { Icon(Icons.Default.Refresh, tr("Retry", "Riprova")) }
             else -> Unit
         }
