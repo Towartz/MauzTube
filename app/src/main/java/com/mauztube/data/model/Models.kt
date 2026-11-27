@@ -33,6 +33,15 @@ data class ChannelItem(
     val description: String?,
 ) : ContentItem
 
+data class PlaylistItem(
+    val id: String,
+    override val url: String,
+    val name: String,
+    val uploaderName: String?,
+    val thumbnailUrl: String?,
+    val streamCount: Long,
+) : ContentItem
+
 /**
  * Una pagina di risultati. [loadNext] incapsula il cursore di paginazione di NewPipe
  * (Page + LinkHandler) senza esporlo agli strati superiori.
@@ -50,6 +59,14 @@ data class ChannelDetails(
     val subscriberCount: Long,
     val description: String?,
     val videos: Paged<VideoItem>,
+    val verified: Boolean = false,
+    val hasLivestreams: Boolean = false,
+)
+
+data class VideoChapter(
+    val title: String,
+    val startSeconds: Int,
+    val previewUrl: String? = null,
 )
 
 data class VideoDetails(
@@ -75,6 +92,10 @@ data class VideoDetails(
     val subtitles: List<SubtitleOption>,
     val related: List<VideoItem>,
     val storyboard: Storyboard? = null,
+    val chapters: List<VideoChapter> = emptyList(),
+    val uploaderVerified: Boolean = false,
+    val category: String? = null,
+    val licence: String? = null,
 )
 
 /**

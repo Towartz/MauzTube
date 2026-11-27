@@ -5,10 +5,13 @@ import com.mauztube.util.tr
 import org.schabi.newpipe.extractor.Image
 import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.channel.ChannelInfoItem
+import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
+import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubePlaylistLinkHandlerFactory
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeStreamLinkHandlerFactory
 import org.schabi.newpipe.extractor.services.youtube.dashmanifestcreators.YoutubeProgressiveDashManifestCreator
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.Stream
+import org.schabi.newpipe.extractor.stream.StreamSegment
 import org.schabi.newpipe.extractor.stream.SubtitlesStream
 import org.schabi.newpipe.extractor.stream.AudioTrackType
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
@@ -31,6 +34,7 @@ object ContentMapper {
     fun map(item: InfoItem, aggressiveShorts: Boolean): ContentItem? = when (item) {
         is StreamInfoItem -> if (ShortsFilter.isShort(item, aggressiveShorts)) null else item.toVideo()
         is ChannelInfoItem -> item.toChannel()
+        is PlaylistInfoItem -> item.toPlaylist()
         else -> null
     }
 
@@ -60,6 +64,24 @@ object ContentMapper {
         avatarUrl = thumbnails.bestUrl(),
         subscriberCount = subscriberCount,
         description = description,
+    )
+
+    private fun PlaylistInfoItem.toPlaylist(): PlaylistItem? {
+        val id = runCatching { YoutubePlaylistLinkHandlerFactory.getInstance().getId(url) }.getOrNull() ?: return null
+        return PlaylistItem(
+            id = id,
+            url = url,
+            name = name,
+            uploaderName = uploaderName?.takeIf { it.isNotBlank() },
+            thumbnailUrl = thumbnails.bestUrl(),
+            streamCount = streamCount,
+        )
+    }
+
+    fun chapter(s: StreamSegment) = VideoChapter(
+        title = s.title,
+        startSeconds = s.startTimeSeconds,
+        previewUrl = s.previewUrl,
     )
 
     fun videoIdOf(url: String): String? =

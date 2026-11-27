@@ -101,9 +101,9 @@ class YouTubeRepository @Inject constructor(
 
     // ---------------- Ricerca ----------------
 
-    suspend fun search(query: String): Paged<ContentItem> = io {
+    suspend fun search(query: String, filter: String = YoutubeSearchQueryHandlerFactory.ALL): Paged<ContentItem> = io {
         val handler = service.searchQHFactory.fromQuery(
-            query, listOf(YoutubeSearchQueryHandlerFactory.ALL), "",
+            query, listOf(filter), "",
         )
         val info = SearchInfo.getInfo(service, handler)
         Paged(ContentMapper.map(info.relatedItems, aggressive()), nextLoader(info.nextPage) { page ->
@@ -128,10 +128,12 @@ class YouTubeRepository @Inject constructor(
 
     // ---------------- Canali ----------------
 
-    suspend fun channel(url: String): ChannelDetails = io {
+    suspend fun channel(url: String, tabFilter: String = ChannelTabs.VIDEOS): ChannelDetails = io {
         val info = ChannelInfo.getInfo(service, url)
-        // Si usa esclusivamente la tab "Video": la tab "Shorts" non viene mai caricata.
-        val videosTab = info.tabs.firstOrNull { ChannelTabs.VIDEOS in it.contentFilters }
+        // La tab "Shorts" non viene mai caricata.
+        val hasLivestreams = info.tabs.any { ChannelTabs.LIVESTREAMS in it.contentFilters }
+        val targetTab = info.tabs.firstOrNull { tabFilter in it.contentFilters }
+            ?: info.tabs.firstOrNull { ChannelTabs.VIDEOS in it.contentFilters }
         ChannelDetails(
             url = info.url,
             name = info.name,
@@ -139,7 +141,9 @@ class YouTubeRepository @Inject constructor(
             bannerUrl = info.banners.bestUrl(),
             subscriberCount = info.subscriberCount,
             description = info.description,
-            videos = videosTab?.let { channelTab(it) } ?: Paged(emptyList(), null),
+            videos = targetTab?.let { channelTab(it) } ?: Paged(emptyList(), null),
+            verified = info.isVerified,
+            hasLivestreams = hasLivestreams,
         )
     }
 
@@ -305,6 +309,10 @@ class YouTubeRepository @Inject constructor(
             subtitles = selectSubtitles(info.subtitles.map(ContentMapper::subtitleOption)),
             related = ContentMapper.mapVideos(info.relatedItems, aggressive()),
             storyboard = pickStoryboard(info.previewFrames),
+            chapters = info.streamSegments.map(ContentMapper::chapter),
+            uploaderVerified = info.isUploaderVerified,
+            category = info.category?.takeIf { it.isNotBlank() },
+            licence = info.licence?.takeIf { it.isNotBlank() },
         )
     }
 
