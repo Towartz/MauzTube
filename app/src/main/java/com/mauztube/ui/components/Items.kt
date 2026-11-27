@@ -446,7 +446,7 @@ fun ContentList(
     val actions = LocalVideoActions.current
     val hiddenVideos = if (filterHidden && actions != null) actions.hiddenVideos.collectAsState().value else emptySet()
     val hiddenChannels = if (filterHidden && actions != null) actions.hiddenChannels.collectAsState().value else emptySet()
-    val items = remember(state.items, hiddenVideos, hiddenChannels, filterHidden) {
+    val visibleItems = remember(state.items, hiddenVideos, hiddenChannels, filterHidden) {
         if (!filterHidden || (hiddenVideos.isEmpty() && hiddenChannels.isEmpty())) state.items
         else state.items.filterNot { item ->
             item is VideoItem && (
@@ -457,7 +457,7 @@ fun ContentList(
                 )
         }
     }
-    if (items.isEmpty()) {
+    if (visibleItems.isEmpty()) {
         when {
             state.loading -> if (header != null) {
                 LazyColumn(modifier.fillMaxSize()) {
@@ -482,12 +482,12 @@ fun ContentList(
 
     // Prefetch "a riposo": se lo scroll si ferma e dei video restano visibili per 1,2 s,
     // vengono estratti in anticipo (max 2, solo su Wi-Fi): toccarli li apre subito.
-    LaunchedEffect(listState.isScrollInProgress, items.size) {
+    LaunchedEffect(listState.isScrollInProgress, visibleItems.size) {
         if (listState.isScrollInProgress || actions == null) return@LaunchedEffect
         delay(1_200)
         val visible = listState.layoutInfo.visibleItemsInfo
             .filter { it.offset >= 0 && it.offset + it.size <= listState.layoutInfo.viewportEndOffset }
-            .mapNotNull { info -> items.firstOrNull { it.url == info.key } as? VideoItem }
+            .mapNotNull { info -> visibleItems.firstOrNull { it.url == info.key } as? VideoItem }
         if (visible.isNotEmpty()) actions.prefetchVisible(visible.map { it.id })
     }
     val nearEnd by remember {
@@ -496,14 +496,14 @@ fun ContentList(
             last >= listState.layoutInfo.totalItemsCount - 4
         }
     }
-    LaunchedEffect(nearEnd, state.canLoadMore, items.size) {
+    LaunchedEffect(nearEnd, state.canLoadMore, visibleItems.size) {
         if (nearEnd && state.canLoadMore && !state.loading && state.error == null) onLoadMore()
     }
 
     // I risultati compaiono in dissolvenza al posto dello scheletro di caricamento.
     LazyColumn(modifier.fillMaxSize().appearIn(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         header?.invoke(this)
-        items(items, key = { it.url }, contentType = {
+        items(visibleItems, key = { it.url }, contentType = {
             when (it) {
                 is VideoItem -> 0
                 is ChannelItem -> 1
