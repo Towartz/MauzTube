@@ -24,9 +24,23 @@ object MicroGHelper {
     private val WEBLOGIN_AUTH_TOKEN_TYPE =
         "weblogin:continue=" + URLEncoder.encode(YOUTUBE_CONTINUE_URL, "UTF-8")
 
-    /** True se sul dispositivo è presente un autenticatore `"com.google"` (GMS o qualsiasi fork microG). */
-    fun hasGoogleAuthenticator(context: Context): Boolean = runCatching {
-        AndroidAccountManager.get(context).authenticatorTypes.any { it.type == GOOGLE_ACCOUNT_TYPE }
+    private val BRAND_KEYWORDS = listOf("microg", "gmscore", "vanced", "revanced", "morphe", "rvx")
+
+    /**
+     * True se sul dispositivo è presente un autenticatore `"com.google"` fornito da microG / GmsCore
+     * (qualsiasi brand o fork: ReVanced, Vanced, microG Services, Morphe, RVX, ecc.), escludendo GMS ufficiale.
+     */
+    fun hasMicroGAuthenticator(context: Context): Boolean = runCatching {
+        val pm = context.packageManager
+        AndroidAccountManager.get(context).authenticatorTypes.any { auth ->
+            if (auth.type != GOOGLE_ACCOUNT_TYPE) return@any false
+            val pkg = auth.packageName
+            if (pkg != "com.google.android.gms") return@any true
+            val label = runCatching {
+                pm.getApplicationInfo(pkg, 0).loadLabel(pm).toString()
+            }.getOrNull().orEmpty()
+            BRAND_KEYWORDS.any { label.contains(it, ignoreCase = true) }
+        }
     }.getOrDefault(false)
 
     /** Intent di sistema/microG per scegliere o aggiungere un account Google ("Account Ask to Sign"). */
@@ -83,7 +97,7 @@ object MicroGHelper {
                     WebLoginResult.Url(tokenUrl)
                 } else {
                     val err = bundle.getString(AndroidAccountManager.KEY_ERROR_MESSAGE)
-                        ?: "No weblogin URL returned"
+                        ?: "Google rejected one-tap weblogin for third-party apps"
                     WebLoginResult.Error(err)
                 }
             }.getOrElse { e ->

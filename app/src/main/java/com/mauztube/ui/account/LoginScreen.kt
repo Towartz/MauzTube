@@ -67,7 +67,7 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     var loading by remember { mutableStateOf(true) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val hasDeviceAuthenticator = remember { MicroGHelper.hasGoogleAuthenticator(context) }
+    val hasDeviceAuthenticator = remember { MicroGHelper.hasMicroGAuthenticator(context) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var pendingAccount by remember { mutableStateOf<String?>(null) }
 
@@ -99,8 +99,14 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                 when (val out = MicroGHelper.requestWebLoginUrl(context, acct)) {
                     is MicroGHelper.WebLoginResult.Url -> loadAuthUrl(out.url)
                     is MicroGHelper.WebLoginResult.Error -> {
-                        loading = false
-                        Feedback.show(out.message)
+                        loading = true
+                        webViewRef?.loadUrl(loginUrlFor(acct))
+                        Feedback.show(
+                            tr(
+                                "Google blocks one-tap device login for third-party apps — continue below or use Import cookies in Settings.",
+                                "Google blocca l'accesso rapido del dispositivo per app di terze parti: continua qui sotto o usa Importa cookie nelle Impostazioni.",
+                            )
+                        )
                     }
                     is MicroGHelper.WebLoginResult.NeedConsent -> {
                         loading = false
@@ -125,8 +131,14 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                     consentLauncher.launch(out.intent)
                 }
                 is MicroGHelper.WebLoginResult.Error -> {
-                    loading = false
-                    Feedback.show(tr("Device account sign-in unavailable: ${out.message}", "Accesso con account del dispositivo non disponibile: ${out.message}"))
+                    loading = true
+                    webViewRef?.loadUrl(loginUrlFor(acct))
+                    Feedback.show(
+                        tr(
+                            "Google blocks one-tap device login for third-party apps — continue below or use Import cookies in Settings.",
+                            "Google blocca l'accesso rapido del dispositivo per app di terze parti: continua qui sotto o usa Importa cookie nelle Impostazioni.",
+                        )
+                    )
                 }
             }
         }
@@ -200,6 +212,9 @@ private const val LOGIN_URL =
     "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true" +
         "&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Dm" +
         "%26next%3Dhttps%253A%252F%252Fm.youtube.com%252F"
+
+private fun loginUrlFor(email: String): String =
+    LOGIN_URL + "&Email=" + java.net.URLEncoder.encode(email, "UTF-8")
 
 private const val CHROME_UA =
     "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) " +
