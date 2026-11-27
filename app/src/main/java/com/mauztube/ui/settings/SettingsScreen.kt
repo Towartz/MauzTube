@@ -390,47 +390,9 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
     }
 
     if (cookieDialog) {
-        val context = androidx.compose.ui.platform.LocalContext.current
-        var raw by remember { mutableStateOf("") }
-        var error by remember { mutableStateOf(false) }
-        AlertDialog(
-            onDismissRequest = { cookieDialog = false },
-            title = { Text(tr("Import YouTube cookies", "Importa cookie di YouTube")) },
-            text = {
-                Column {
-                    Text(
-                        tr(
-                            "Alternative if Google blocks sign-in inside the app. In a desktop browser " +
-                                "signed in to youtube.com: Developer tools → Network → a request to " +
-                                "youtube.com → copy the value of the \"Cookie\" header and paste it here.",
-                            "Alternativa se Google blocca il login nell'app. Da un browser desktop " +
-                                "loggato su youtube.com: Strumenti sviluppatore → Rete → una richiesta a " +
-                                "youtube.com → copia il valore dell'header \"Cookie\" e incollalo qui.",
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    OutlinedTextField(
-                        value = raw,
-                        onValueChange = { raw = it; error = false },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        maxLines = 4,
-                        isError = error,
-                        supportingText = { if (error) Text(tr("SAPISID cookie not found", "Cookie SAPISID non trovato")) },
-                    )
-                    TextButton(onClick = {
-                        val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                        val clip = cm?.primaryClip?.takeIf { it.itemCount > 0 }
-                        val pasted = clip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-                        if (pasted.isNotBlank()) { raw = pasted; error = false }
-                    }) { Text(tr("Paste from clipboard", "Incolla dagli appunti")) }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (vm.account.importCookieHeader(raw)) cookieDialog = false else error = true
-                }) { Text(tr("Import", "Importa")) }
-            },
-            dismissButton = { TextButton(onClick = { cookieDialog = false }) { Text(tr("Cancel", "Annulla")) } },
+        com.mauztube.ui.account.ImportCookieDialog(
+            account = vm.account,
+            onDismiss = { cookieDialog = false },
         )
     }
 

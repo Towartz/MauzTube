@@ -2,29 +2,31 @@ package com.mauztube.ui.account
 
 import com.mauztube.util.tr
 
-import android.accounts.AccountManager as AndroidAccountManager
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.graphics.Bitmap
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,18 +35,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.mauztube.data.account.AccountManager
-import com.mauztube.data.account.MicroGHelper
-import com.mauztube.util.Feedback
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -58,92 +57,21 @@ class LoginViewModel @Inject constructor(val account: AccountManager) : ViewMode
  *  - lo User-Agent è quello di Chrome mobile, senza il marcatore "; wv" (i WebView
  *    aggiornati non inviano più nemmeno l'header X-Requested-With).
  * Se Google mostra comunque "Questo browser potrebbe non essere sicuro", usare
- * Impostazioni → "Importa cookie" come alternativa.
+ * "Importa cookie" direttamente dalla barra in alto.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     var loading by remember { mutableStateOf(true) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val microGTypes = remember { MicroGHelper.microGAccountTypes(context) }
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    var pendingAccount by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var cookieDialog by remember { mutableStateOf(false) }
 
-    fun loadAuthUrl(authUrl: String) {
-        if (!AccountManager.isTrustedGoogleUrl(authUrl.toHttpUrlOrNull())) {
-            loading = false
-            Feedback.show(tr("Untrusted login URL blocked", "URL di accesso non attendibile bloccato"))
-            return
-        }
-        loading = true
-        CookieManager.getInstance().removeAllCookies {
-            webViewRef?.loadUrl(authUrl)
-        }
-    }
-
-    val consentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-        val acct = pendingAccount
-        val directUrl = res.data?.getStringExtra(AndroidAccountManager.KEY_AUTHTOKEN)
-        if (!directUrl.isNullOrBlank() &&
-            AccountManager.isTrustedGoogleUrl(directUrl.toHttpUrlOrNull()) &&
-            "WILL_NOT_SIGN_IN" !in directUrl
-        ) {
-            loadAuthUrl(directUrl)
-            return@rememberLauncherForActivityResult
-        }
-        if (res.resultCode == Activity.RESULT_OK && acct != null) {
-            loading = true
-            scope.launch {
-                when (val out = MicroGHelper.requestWebLoginUrl(context, acct.first, acct.second)) {
-                    is MicroGHelper.WebLoginResult.Url -> loadAuthUrl(out.url)
-                    is MicroGHelper.WebLoginResult.Error -> {
-                        loading = true
-                        webViewRef?.loadUrl(loginUrlFor(acct.first))
-                        Feedback.show(
-                            tr(
-                                "Google blocks one-tap device login for third-party apps — continue below or use Import cookies in Settings.",
-                                "Google blocca l'accesso rapido del dispositivo per app di terze parti: continua qui sotto o usa Importa cookie nelle Impostazioni.",
-                            )
-                        )
-                    }
-                    is MicroGHelper.WebLoginResult.NeedConsent -> {
-                        loading = false
-                        Feedback.show(tr("Account permission not granted", "Permesso account non concesso"))
-                    }
-                }
-            }
-        } else {
-            loading = false
-        }
-    }
-
-    val accountPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-        val name = res.data?.getStringExtra(AndroidAccountManager.KEY_ACCOUNT_NAME) ?: return@rememberLauncherForActivityResult
-        val type = res.data?.getStringExtra(AndroidAccountManager.KEY_ACCOUNT_TYPE)
-            ?: microGTypes.firstOrNull() ?: return@rememberLauncherForActivityResult
-        pendingAccount = name to type
-        loading = true
-        scope.launch {
-            when (val out = MicroGHelper.requestWebLoginUrl(context, name, type)) {
-                is MicroGHelper.WebLoginResult.Url -> loadAuthUrl(out.url)
-                is MicroGHelper.WebLoginResult.NeedConsent -> {
-                    loading = false
-                    consentLauncher.launch(out.intent)
-                }
-                is MicroGHelper.WebLoginResult.Error -> {
-                    loading = true
-                    webViewRef?.loadUrl(loginUrlFor(name))
-                    Feedback.show(
-                        tr(
-                            "Google blocks one-tap device login for third-party apps — continue below or use Import cookies in Settings.",
-                            "Google blocca l'accesso rapido del dispositivo per app di terze parti: continua qui sotto o usa Importa cookie nelle Impostazioni.",
-                        )
-                    )
-                }
-            }
-        }
+    if (cookieDialog) {
+        ImportCookieDialog(
+            account = vm.account,
+            onDismiss = { cookieDialog = false },
+            onImported = { cookieDialog = false; onDone() },
+        )
     }
 
     Scaffold(
@@ -152,13 +80,8 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                 title = { Text(tr("Sign in to Google", "Accedi a Google")) },
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Default.Close, tr("Close", "Chiudi")) } },
                 actions = {
-                    if (microGTypes.isNotEmpty()) {
-                        TextButton(onClick = {
-                            runCatching { accountPickerLauncher.launch(MicroGHelper.chooseAccountIntent(microGTypes)) }
-                                .onFailure { Feedback.show(tr("No microG account picker available", "Nessun selettore account microG disponibile")) }
-                        }) {
-                            Text(tr("MicroG account", "Account microG"))
-                        }
+                    TextButton(onClick = { cookieDialog = true }) {
+                        Text(tr("Import cookies", "Importa cookie"))
                     }
                 },
             )
@@ -172,7 +95,6 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
                         WebView(ctx).apply {
-                            webViewRef = this
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.allowFileAccess = false
@@ -210,13 +132,89 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     }
 }
 
+@Composable
+fun ImportCookieDialog(
+    account: AccountManager,
+    onDismiss: () -> Unit,
+    onImported: () -> Unit = onDismiss,
+) {
+    val context = LocalContext.current
+    var raw by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf(false) }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val text = runCatching {
+            context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
+                val buf = CharArray(65_536)
+                val read = reader.read(buf)
+                if (read > 0) String(buf, 0, read) else ""
+            }
+        }.getOrNull().orEmpty()
+        val parsed = parseCookieFile(text)
+        raw = parsed
+        if (account.importCookieHeader(parsed)) onImported() else error = true
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("Import YouTube cookies", "Importa cookie di YouTube")) },
+        text = {
+            Column {
+                Text(
+                    tr(
+                        "Alternative if Google blocks sign-in inside the app. Paste the \"Cookie\" header from a desktop browser signed in to youtube.com, or import a cookies.txt file.",
+                        "Alternativa se Google blocca il login nell'app. Incolla l'header \"Cookie\" da un browser desktop loggato su youtube.com, oppure importa un file cookies.txt.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = raw,
+                    onValueChange = { raw = it; error = false },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    maxLines = 4,
+                    isError = error,
+                    supportingText = { if (error) Text(tr("SAPISID cookie not found", "Cookie SAPISID non trovato")) },
+                )
+                Row {
+                    TextButton(onClick = {
+                        val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                        val clip = cm?.primaryClip?.takeIf { it.itemCount > 0 }
+                        val pasted = clip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                        if (pasted.isNotBlank()) { raw = pasted; error = false }
+                    }) { Text(tr("Paste", "Incolla")) }
+                    TextButton(onClick = {
+                        runCatching { filePicker.launch(arrayOf("text/*", "*/*")) }
+                    }) { Text(tr("Import file", "Importa file")) }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (account.importCookieHeader(raw)) onImported() else error = true
+            }) { Text(tr("Import", "Importa")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "Annulla")) } },
+    )
+}
+
+/** Estrae cookie `name=value` da un file Netscape `cookies.txt` (youtube.com) o testo grezzo. */
+private fun parseCookieFile(raw: String): String {
+    val netscape = raw.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("#") }
+        .mapNotNull { line ->
+            val cols = line.split('\t')
+            if (cols.size >= 7 && cols[0].lowercase().let { it.endsWith("youtube.com") || it == ".youtube.com" }) {
+                "${cols[5]}=${cols[6]}"
+            } else null
+        }
+        .toList()
+    return if (netscape.isNotEmpty()) netscape.joinToString("; ") else raw
+}
+
 private const val LOGIN_URL =
     "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true" +
         "&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Dm" +
         "%26next%3Dhttps%253A%252F%252Fm.youtube.com%252F"
-
-private fun loginUrlFor(email: String): String =
-    LOGIN_URL + "&Email=" + java.net.URLEncoder.encode(email, "UTF-8")
 
 private const val CHROME_UA =
     "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) " +
