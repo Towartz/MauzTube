@@ -66,33 +66,52 @@ class LoginViewModel @Inject constructor(val account: AccountManager) : ViewMode
 fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     var loading by remember { mutableStateOf(true) }
     val context = LocalContext.current
-    val activity = context as? Activity
     val scope = rememberCoroutineScope()
     val hasDeviceAuthenticator = remember { MicroGHelper.hasGoogleAuthenticator(context) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var pendingAccount by remember { mutableStateOf<String?>(null) }
 
+    fun loadAuthUrl(authUrl: String) {
+        loading = true
+        CookieManager.getInstance().removeAllCookies {
+            webViewRef?.loadUrl(authUrl)
+        }
+    }
+
     val consentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         val acct = pendingAccount
-        if (res.resultCode == Activity.RESULT_OK && acct != null && activity != null) {
+        val directUrl = res.data?.getStringExtra(AndroidAccountManager.KEY_AUTHTOKEN)
+        if (!directUrl.isNullOrBlank() && directUrl.startsWith("http") && "WILL_NOT_SIGN_IN" !in directUrl) {
+            loadAuthUrl(directUrl)
+            return@rememberLauncherForActivityResult
+        }
+        if (res.resultCode == Activity.RESULT_OK && acct != null) {
+            loading = true
             scope.launch {
-                when (val out = MicroGHelper.requestWebLoginUrl(activity, acct)) {
-                    is MicroGHelper.WebLoginResult.Url -> webViewRef?.loadUrl(out.url)
-                    is MicroGHelper.WebLoginResult.Error -> Feedback.show(out.message)
-                    is MicroGHelper.WebLoginResult.NeedConsent -> Feedback.show(tr("Account permission not granted", "Permesso account non concesso"))
+                when (val out = MicroGHelper.requestWebLoginUrl(context, acct)) {
+                    is MicroGHelper.WebLoginResult.Url -> loadAuthUrl(out.url)
+                    is MicroGHelper.WebLoginResult.Error -> {
+                        loading = false
+                        Feedback.show(out.message)
+                    }
+                    is MicroGHelper.WebLoginResult.NeedConsent -> {
+                        loading = false
+                        Feedback.show(tr("Account permission not granted", "Permesso account non concesso"))
+                    }
                 }
             }
+        } else {
+            loading = false
         }
     }
 
     val accountPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         val acct = res.data?.getStringExtra(AndroidAccountManager.KEY_ACCOUNT_NAME) ?: return@rememberLauncherForActivityResult
-        if (activity == null) return@rememberLauncherForActivityResult
         pendingAccount = acct
         loading = true
         scope.launch {
-            when (val out = MicroGHelper.requestWebLoginUrl(activity, acct)) {
-                is MicroGHelper.WebLoginResult.Url -> webViewRef?.loadUrl(out.url)
+            when (val out = MicroGHelper.requestWebLoginUrl(context, acct)) {
+                is MicroGHelper.WebLoginResult.Url -> loadAuthUrl(out.url)
                 is MicroGHelper.WebLoginResult.NeedConsent -> {
                     loading = false
                     consentLauncher.launch(out.intent)

@@ -2,13 +2,13 @@ package com.mauztube.data.account
 
 import android.accounts.Account
 import android.accounts.AccountManager as AndroidAccountManager
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.net.URLEncoder
 
 /**
  * Integrazione con gli account Google di sistema / microG / GmsCore tramite [AndroidAccountManager].
@@ -18,8 +18,10 @@ import kotlinx.coroutines.withContext
 object MicroGHelper {
 
     private const val GOOGLE_ACCOUNT_TYPE = "com.google"
-    private const val WEBLOGIN_AUTH_TOKEN_TYPE =
-        "weblogin:service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true&app=m&next=https%3A%2F%2Fm.youtube.com%2F"
+    private const val YOUTUBE_CONTINUE_URL =
+        "https://www.youtube.com/signin?action_handle_signin=true&app=m&next=https%3A%2F%2Fm.youtube.com%2F"
+    private val WEBLOGIN_AUTH_TOKEN_TYPE =
+        "weblogin:continue=" + URLEncoder.encode(YOUTUBE_CONTINUE_URL, "UTF-8")
 
     /** True se sul dispositivo è presente un autenticatore `"com.google"` (GMS o qualsiasi fork microG). */
     fun hasGoogleAuthenticator(context: Context): Boolean = runCatching {
@@ -46,18 +48,19 @@ object MicroGHelper {
     }
 
     /**
-     * Richiede a microG/GMS un URL `weblogin:` per accedere automaticamente a YouTube nel WebView
-     * con l'account scelto, chiedendo il consenso all'utente se richiesto dal provider.
+     * Richiede a microG/GMS un URL `weblogin:continue=...` per accedere automaticamente a YouTube
+     * nel WebView con l'account scelto, restituendo [WebLoginResult.NeedConsent] se l'utente
+     * deve prima concedere il permesso.
      */
-    suspend fun requestWebLoginUrl(activity: Activity, accountName: String): WebLoginResult =
+    suspend fun requestWebLoginUrl(context: Context, accountName: String): WebLoginResult =
         withContext(Dispatchers.IO) {
             runCatching {
-                val am = AndroidAccountManager.get(activity)
+                val am = AndroidAccountManager.get(context)
                 val future = am.getAuthToken(
                     Account(accountName, GOOGLE_ACCOUNT_TYPE),
                     WEBLOGIN_AUTH_TOKEN_TYPE,
                     null,
-                    activity,
+                    false,
                     null,
                     null,
                 )
@@ -72,7 +75,7 @@ object MicroGHelper {
                     return@runCatching WebLoginResult.NeedConsent(consentIntent)
                 }
                 val tokenUrl = bundle.getString(AndroidAccountManager.KEY_AUTHTOKEN)
-                if (!tokenUrl.isNullOrBlank() && tokenUrl.startsWith("http")) {
+                if (!tokenUrl.isNullOrBlank() && tokenUrl.startsWith("http") && "WILL_NOT_SIGN_IN" !in tokenUrl) {
                     WebLoginResult.Url(tokenUrl)
                 } else {
                     val err = bundle.getString(AndroidAccountManager.KEY_ERROR_MESSAGE)
