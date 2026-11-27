@@ -116,6 +116,30 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Restore pinned CI keystore
+        if: steps.keystore.outputs.signed != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/ci-pinned.jks
+          key: ci-pinned-keystore-v1-${{ github.repository_id }}
+
+      - name: Ensure pinned CI keystore exists
+        if: steps.keystore.outputs.signed != 'true'
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/ci-pinned.jks" ]; then
+            keytool -genkeypair -noprompt \
+              -keystore "$HOME/.android/ci-pinned.jks" \
+              -storepass android \
+              -keypass android \
+              -alias mauztube-ci \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=MauzTube CI,O=MauzTube,C=US"
+          fi
+          chmod 600 "$HOME/.android/ci-pinned.jks"
+
       - name: Assemble release APK
         env:
           SIGNED: ${{ steps.keystore.outputs.signed }}
@@ -124,16 +148,18 @@ jobs:
           KEY_ALIAS_VAL: ${{ secrets.KEY_ALIAS }}
           KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
-          extra_args=()
           if [ "$SIGNED" = "true" ]; then
             export MAUZTUBE_KEYSTORE="$KEYSTORE_PATH"
             export MAUZTUBE_KEYSTORE_PASSWORD="$KEYSTORE_PASS"
             export MAUZTUBE_KEY_ALIAS="$KEY_ALIAS_VAL"
             export MAUZTUBE_KEY_PASSWORD="$KEY_PASS"
           else
-            extra_args+=("-PdebugSign")
+            export MAUZTUBE_KEYSTORE="$HOME/.android/ci-pinned.jks"
+            export MAUZTUBE_KEYSTORE_PASSWORD="android"
+            export MAUZTUBE_KEY_ALIAS="mauztube-ci"
+            export MAUZTUBE_KEY_PASSWORD="android"
           fi
-          ./gradlew assembleRelease "${extra_args[@]}" \
+          ./gradlew assembleRelease \
             --no-daemon \
             --parallel \
             --build-cache \
