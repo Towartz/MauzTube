@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -66,6 +67,32 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val microG = remember { com.mauztube.data.account.MicroGHelper.detectProviders(context) }
+            if (microG.isNotEmpty()) {
+                val first = microG.first()
+                androidx.compose.foundation.layout.Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Text(
+                        tr(
+                            "${first.label} detected — sign in here or use Import cookies in Settings.",
+                            "${first.label} rilevato — accedi qui o usa Importa cookie nelle Impostazioni.",
+                        ),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.TextButton(onClick = {
+                        com.mauztube.data.account.MicroGHelper.openProvider(context, first.packageName)
+                    }) {
+                        Text(first.label, maxLines = 1)
+                    }
+                }
+            }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             Box(Modifier.fillMaxSize()) {
                 AndroidView(

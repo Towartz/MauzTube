@@ -167,6 +167,8 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
 
         item(key = "acc") { Section(tr("Google account", "Account Google")) }
         item(key = "acc-row") {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val microG = remember { com.mauztube.data.account.MicroGHelper.detectProviders(context) }
             Column {
                 Text(
                     when {
@@ -183,6 +185,29 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
                     } else {
                         TextButton(onClick = onLogin) { Text(tr("Sign in with Google", "Accedi con Google")) }
                         TextButton(onClick = { cookieDialog = true }) { Text(tr("Import cookies", "Importa cookie")) }
+                    }
+                }
+                microG.forEach { provider ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            buildString {
+                                append(provider.label)
+                                provider.versionName?.let { append(" ($it)") }
+                                append(" · ")
+                                append(provider.packageName)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { com.mauztube.data.account.MicroGHelper.openProvider(context, provider.packageName) }) {
+                            Text(tr("Open", "Apri"))
+                        }
                     }
                 }
             }

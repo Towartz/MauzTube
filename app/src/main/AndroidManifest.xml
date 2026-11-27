@@ -19,9 +19,26 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
-    <!-- Trasmissione dello schermo sui Samsung (Smart View). -->
+    <!-- Trasmissione dello schermo sui Samsung (Smart View) e rilevamento microG/GmsCore. -->
     <queries>
         <package android:name="com.samsung.android.smartmirroring" />
+        <package android:name="app.revanced.android.gms" />
+        <package android:name="com.revanced.android.gms" />
+        <package android:name="com.mgoogle.android.gms" />
+        <package android:name="org.microg.gms" />
+        <package android:name="org.microg.gms.core" />
+        <package android:name="app.morphe.android.gms" />
+        <package android:name="app.rvx.android.gms" />
+        <package android:name="com.google.android.gms" />
+        <intent>
+            <action android:name="org.microg.gms.ui.SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="com.google.android.c2dm.intent.REGISTER" />
+        </intent>
+        <intent>
+            <action android:name="android.accounts.AccountAuthenticator" />
+        </intent>
     </queries>
 
     <application
