@@ -2,12 +2,16 @@ package com.mauztube.ui.account
 
 import com.mauztube.util.tr
 
+import android.accounts.AccountManager as AndroidAccountManager
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.graphics.Bitmap
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,19 +27,24 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.mauztube.data.account.AccountManager
+import com.mauztube.data.account.MicroGHelper
+import com.mauztube.util.Feedback
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -56,49 +65,73 @@ class LoginViewModel @Inject constructor(val account: AccountManager) : ViewMode
 @Composable
 fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     var loading by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val scope = rememberCoroutineScope()
+    val hasDeviceAuthenticator = remember { MicroGHelper.hasGoogleAuthenticator(context) }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var pendingAccount by remember { mutableStateOf<String?>(null) }
+
+    val consentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val acct = pendingAccount
+        if (res.resultCode == Activity.RESULT_OK && acct != null && activity != null) {
+            scope.launch {
+                when (val out = MicroGHelper.requestWebLoginUrl(activity, acct)) {
+                    is MicroGHelper.WebLoginResult.Url -> webViewRef?.loadUrl(out.url)
+                    is MicroGHelper.WebLoginResult.Error -> Feedback.show(out.message)
+                    is MicroGHelper.WebLoginResult.NeedConsent -> Feedback.show(tr("Account permission not granted", "Permesso account non concesso"))
+                }
+            }
+        }
+    }
+
+    val accountPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val acct = res.data?.getStringExtra(AndroidAccountManager.KEY_ACCOUNT_NAME) ?: return@rememberLauncherForActivityResult
+        if (activity == null) return@rememberLauncherForActivityResult
+        pendingAccount = acct
+        loading = true
+        scope.launch {
+            when (val out = MicroGHelper.requestWebLoginUrl(activity, acct)) {
+                is MicroGHelper.WebLoginResult.Url -> webViewRef?.loadUrl(out.url)
+                is MicroGHelper.WebLoginResult.NeedConsent -> {
+                    loading = false
+                    consentLauncher.launch(out.intent)
+                }
+                is MicroGHelper.WebLoginResult.Error -> {
+                    loading = false
+                    Feedback.show(tr("Device account sign-in unavailable: ${out.message}", "Accesso con account del dispositivo non disponibile: ${out.message}"))
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(tr("Sign in to Google", "Accedi a Google")) },
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Default.Close, tr("Close", "Chiudi")) } },
+                actions = {
+                    if (hasDeviceAuthenticator) {
+                        TextButton(onClick = {
+                            runCatching { accountPickerLauncher.launch(MicroGHelper.chooseAccountIntent()) }
+                                .onFailure { Feedback.show(tr("No Google/microG account picker available", "Nessun selettore account Google/microG disponibile")) }
+                        }) {
+                            Text(tr("Device account", "Account dispositivo"))
+                        }
+                    }
+                },
             )
         },
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            val microG = remember { com.mauztube.data.account.MicroGHelper.detectProviders(context) }
-            if (microG.isNotEmpty()) {
-                val first = microG.first()
-                androidx.compose.foundation.layout.Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                ) {
-                    Text(
-                        tr(
-                            "${first.label} detected — sign in here or use Import cookies in Settings.",
-                            "${first.label} rilevato — accedi qui o usa Importa cookie nelle Impostazioni.",
-                        ),
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    androidx.compose.material3.TextButton(onClick = {
-                        com.mauztube.data.account.MicroGHelper.openProvider(context, first.packageName)
-                    }) {
-                        Text(first.label, maxLines = 1)
-                    }
-                }
-            }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             Box(Modifier.fillMaxSize()) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
                         WebView(ctx).apply {
+                            webViewRef = this
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.allowFileAccess = false

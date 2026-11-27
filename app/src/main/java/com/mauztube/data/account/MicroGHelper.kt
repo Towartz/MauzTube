@@ -1,106 +1,86 @@
 package com.mauztube.data.account
 
+import android.accounts.Account
 import android.accounts.AccountManager as AndroidAccountManager
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.provider.Settings
+import android.os.Build
+import android.os.Bundle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
- * Rileva qualsiasi implementazione di microG / GmsCore installata sul dispositivo
- * (microG Services, Vanced microG, ReVanced GmsCore, Morphe/RVX o fork personalizzati),
- * indipendentemente dal nome del pacchetto o dal brand.
+ * Integrazione con gli account Google di sistema / microG / GmsCore tramite [AndroidAccountManager].
+ * Funziona con qualsiasi brand o pacchetto (Google GMS, microG Services, ReVanced GmsCore,
+ * Vanced microG, Morphe/RVX, ecc.) perché interroga gli autenticatori registrati per `"com.google"`.
  */
 object MicroGHelper {
 
-    data class Provider(
-        val packageName: String,
-        val label: String,
-        val versionName: String?,
-    )
+    private const val GOOGLE_ACCOUNT_TYPE = "com.google"
+    private const val WEBLOGIN_AUTH_TOKEN_TYPE =
+        "weblogin:service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true&app=m&next=https%3A%2F%2Fm.youtube.com%2F"
 
-    private val KNOWN_PACKAGES = listOf(
-        "app.revanced.android.gms",
-        "com.revanced.android.gms",
-        "com.mgoogle.android.gms",
-        "org.microg.gms",
-        "org.microg.gms.core",
-        "app.morphe.android.gms",
-        "app.rvx.android.gms",
-        "com.google.android.gms",
-    )
+    /** True se sul dispositivo è presente un autenticatore `"com.google"` (GMS o qualsiasi fork microG). */
+    fun hasGoogleAuthenticator(context: Context): Boolean = runCatching {
+        AndroidAccountManager.get(context).authenticatorTypes.any { it.type == GOOGLE_ACCOUNT_TYPE }
+    }.getOrDefault(false)
 
-    private val BRAND_KEYWORDS = listOf("microg", "gmscore", "vanced", "revanced", "morphe", "rvx")
+    /** Intent di sistema/microG per scegliere o aggiungere un account Google ("Account Ask to Sign"). */
+    @Suppress("DEPRECATION")
+    fun chooseAccountIntent(): Intent =
+        AndroidAccountManager.newChooseAccountIntent(
+            null,
+            null,
+            arrayOf(GOOGLE_ACCOUNT_TYPE),
+            null,
+            null,
+            null,
+            null,
+        )
 
-    fun detectProviders(context: Context): List<Provider> {
-        val pm = context.packageManager
-        val candidates = linkedSetOf<String>()
+    sealed interface WebLoginResult {
+        data class Url(val url: String) : WebLoginResult
+        data class NeedConsent(val intent: Intent) : WebLoginResult
+        data class Error(val message: String) : WebLoginResult
+    }
 
-        // 1. Qualsiasi pacchetto registrato come autenticatore "com.google" (copre qualsiasi fork/brand).
-        runCatching {
-            AndroidAccountManager.get(context).authenticatorTypes
-                .filter { it.type == "com.google" }
-                .forEach { candidates.add(it.packageName) }
-        }
-
-        // 2. Pacchetti che espongono servizi microG / GmsCore.
-        listOf(
-            "org.microg.gms.ui.SETTINGS",
-            "com.google.android.c2dm.intent.REGISTER",
-            "android.accounts.AccountAuthenticator",
-        ).forEach { action ->
+    /**
+     * Richiede a microG/GMS un URL `weblogin:` per accedere automaticamente a YouTube nel WebView
+     * con l'account scelto, chiedendo il consenso all'utente se richiesto dal provider.
+     */
+    suspend fun requestWebLoginUrl(activity: Activity, accountName: String): WebLoginResult =
+        withContext(Dispatchers.IO) {
             runCatching {
-                pm.queryIntentServices(Intent(action), 0)
-                    .mapNotNull { it.serviceInfo?.packageName }
-                    .forEach { candidates.add(it) }
-            }
-            runCatching {
-                pm.queryIntentActivities(Intent(action), 0)
-                    .mapNotNull { it.activityInfo?.packageName }
-                    .forEach { candidates.add(it) }
-            }
-        }
-
-        // 3. Fallback sui pacchetti noti.
-        candidates.addAll(KNOWN_PACKAGES)
-
-        return candidates.mapNotNull { pkg ->
-            val info = runCatching { pm.getPackageInfo(pkg, 0) }.getOrNull() ?: return@mapNotNull null
-            val appInfo = info.applicationInfo ?: return@mapNotNull null
-            val label = runCatching { appInfo.loadLabel(pm).toString() }.getOrNull().orEmpty().ifBlank { pkg }
-            val isOfficialGms = pkg == "com.google.android.gms" &&
-                BRAND_KEYWORDS.none { label.contains(it, ignoreCase = true) }
-            val matchesBrand = pkg != "com.google.android.gms" && (
-                pkg in KNOWN_PACKAGES ||
-                    BRAND_KEYWORDS.any { pkg.contains(it, ignoreCase = true) || label.contains(it, ignoreCase = true) }
+                val am = AndroidAccountManager.get(activity)
+                val future = am.getAuthToken(
+                    Account(accountName, GOOGLE_ACCOUNT_TYPE),
+                    WEBLOGIN_AUTH_TOKEN_TYPE,
+                    null,
+                    activity,
+                    null,
+                    null,
                 )
-            if (!matchesBrand && isOfficialGms) return@mapNotNull null
-            if (!matchesBrand && pkg == "com.google.android.gms") return@mapNotNull null
-            Provider(
-                packageName = pkg,
-                label = label,
-                versionName = info.versionName,
-            )
-        }.distinctBy { it.packageName }
-    }
-
-    fun openProvider(context: Context, packageName: String): Boolean {
-        val pm = context.packageManager
-        val launch = pm.getLaunchIntentForPackage(packageName)
-            ?: Intent("org.microg.gms.ui.SETTINGS").setPackage(packageName)
-        if (launch.resolveActivity(pm) != null) {
-            return runCatching {
-                context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                true
-            }.getOrDefault(false)
+                val bundle: Bundle = future.result
+                val consentIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    bundle.getParcelable(AndroidAccountManager.KEY_INTENT, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    bundle.getParcelable(AndroidAccountManager.KEY_INTENT)
+                }
+                if (consentIntent != null) {
+                    return@runCatching WebLoginResult.NeedConsent(consentIntent)
+                }
+                val tokenUrl = bundle.getString(AndroidAccountManager.KEY_AUTHTOKEN)
+                if (!tokenUrl.isNullOrBlank() && tokenUrl.startsWith("http")) {
+                    WebLoginResult.Url(tokenUrl)
+                } else {
+                    val err = bundle.getString(AndroidAccountManager.KEY_ERROR_MESSAGE)
+                        ?: "No weblogin URL returned"
+                    WebLoginResult.Error(err)
+                }
+            }.getOrElse { e ->
+                WebLoginResult.Error(e.message ?: e.javaClass.simpleName)
+            }
         }
-        return runCatching {
-            val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                .setData(Uri.fromParts("package", packageName, null))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(details)
-            true
-        }.getOrDefault(false)
-    }
 }
