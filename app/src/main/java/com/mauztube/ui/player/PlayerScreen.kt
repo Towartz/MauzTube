@@ -385,6 +385,17 @@ private fun Details(
 ) {
     val d = s.details
     var expanded by remember { mutableStateOf(false) }
+    val actions = com.mauztube.ui.components.LocalVideoActions.current
+    val hiddenVideos by (actions?.hiddenVideos ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
+    val hiddenChannels by (actions?.hiddenChannels ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
+    val visibleRelated = remember(d.related, hiddenVideos, hiddenChannels) {
+        d.related.distinctBy { it.id }.filterNot { v ->
+            v.id in hiddenVideos ||
+                com.mauztube.data.prefs.AppSettings.channelKey(v.uploaderUrl, v.uploaderName).let {
+                    it.isNotBlank() && it in hiddenChannels
+                }
+        }
+    }
 
     LazyColumn(Modifier.fillMaxSize()) {
         item(key = "info") {
@@ -536,17 +547,6 @@ private fun Details(
             }
         }
         // YouTube a volte ripete un video tra i correlati: chiavi duplicate farebbero chiudere l'app.
-        val actions = com.mauztube.ui.components.LocalVideoActions.current
-        val hiddenVideos by (actions?.hiddenVideos ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
-        val hiddenChannels by (actions?.hiddenChannels ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
-        val visibleRelated = remember(d.related, hiddenVideos, hiddenChannels) {
-            d.related.distinctBy { it.id }.filterNot { v ->
-                v.id in hiddenVideos ||
-                    com.mauztube.data.prefs.AppSettings.channelKey(v.uploaderUrl, v.uploaderName).let {
-                        it.isNotBlank() && it in hiddenChannels
-                    }
-            }
-        }
         items(visibleRelated, key = { "rel-" + it.id }) { video ->
             VideoCard(video, onClick = { VideoPreviews.put(video); onVideo(video.id) }, showQueueButton = true)
         }
