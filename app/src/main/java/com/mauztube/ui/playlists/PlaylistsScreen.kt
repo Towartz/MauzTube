@@ -168,12 +168,8 @@ fun PlaylistsScreen(
             }
         }
         if (remote.isNotEmpty()) {
-            item {
-                Text(
-                    tr("From your Google account", "Dal tuo account Google"),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
-                )
+            if (local.isNotEmpty()) {
+                item { androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             }
             items(remote, key = { "r${it.playlistId}" }) { p ->
                 PlaylistRow(p.title, p.countText ?: tr("Playlists", "Playlist"), p.thumbnailUrl, AppIcons.PlaylistPlay) {

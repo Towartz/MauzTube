@@ -198,26 +198,27 @@ fun HomeScreen(
             emptyMessage = if (source == HomeSource.ACCOUNT)
                 tr("No recommendations: your YouTube watch history is empty or paused.", "Nessun consiglio: la cronologia YouTube dell'account è vuota o in pausa.")
             else tr("Watch a few videos or subscribe to a channel: recommendations will start from there.", "Guarda qualche video o iscriviti a un canale: i consigli arriveranno da lì."),
-            header = {
-                item(key = "source") {
-                    Row(
-                        Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            if (source == HomeSource.ACCOUNT) tr("From your Google account", "Dal tuo account Google")
-                            else tr("Based on your subscriptions and history", "In base a iscrizioni e video visti"),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (!loggedIn) {
-                            TextButton(onClick = onLogin) { Text(tr("Sign in", "Accedi")) }
+            header = if (source != HomeSource.ACCOUNT || !loggedIn) {
+                {
+                    item(key = "source") {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                tr("Based on your subscriptions and history", "In base a iscrizioni e video visti"),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (!loggedIn) {
+                                TextButton(onClick = onLogin) { Text(tr("Sign in", "Accedi")) }
+                            }
                         }
                     }
                 }
-            },
+            } else null,
         )
     }
 }
