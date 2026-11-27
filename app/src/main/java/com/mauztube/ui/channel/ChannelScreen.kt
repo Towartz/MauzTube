@@ -2,6 +2,8 @@ package com.mauztube.ui.channel
 
 import com.mauztube.util.tr
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,6 +28,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -64,7 +70,7 @@ class ChannelViewModel @Inject constructor(
 
     private val url = savedState.toRoute<ChannelRoute>().url
 
-    private val _header = MutableStateFlow<ChannelDetails?>(null)
+    private val _header = MutableStateFlow(com.mauztube.data.model.ChannelPreviews.get(url))
     val header: StateFlow<ChannelDetails?> = _header
 
     private val _tab = MutableStateFlow("videos")
@@ -75,7 +81,7 @@ class ChannelViewModel @Inject constructor(
 
     // Il primo caricamento recupera intestazione + prima pagina della tab selezionata.
     val videos = PagedListController<VideoItem>(viewModelScope) {
-        val details = repo.channel(url, _tab.value)
+        val details = repo.channel(url, _tab.value) { _header.value = it }
         _header.value = details
         Paged(details.videos.items, details.videos.loadNext)
     }
@@ -154,7 +160,7 @@ private fun ChannelHeader(
                 model = h.bannerUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().aspectRatio(6f),
+                modifier = Modifier.fillMaxWidth().aspectRatio(4.5f),
             )
         }
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -165,16 +171,35 @@ private fun ChannelHeader(
                     Text(h.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (h.verified) {
                         Spacer(Modifier.width(4.dp))
-                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                     }
                 }
                 if (h.subscriberCount >= 0) {
-                    Text(tr("${Format.count(h.subscriberCount)} subscribers", "${Format.count(h.subscriberCount)} iscritti"), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        tr("${Format.count(h.subscriberCount)} subscribers", "${Format.count(h.subscriberCount)} iscritti"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             Spacer(Modifier.width(8.dp))
             if (subscribed) OutlinedButton(onClick = onToggle) { Text(tr("Subscribed", "Iscritto"), maxLines = 1) }
             else Button(onClick = onToggle) { Text(tr("Subscribe", "Iscriviti"), maxLines = 1) }
+        }
+        if (!h.description.isNullOrBlank()) {
+            var expanded by remember { mutableStateOf(false) }
+            Text(
+                h.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (expanded) 8 else 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .animateContentSize()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
         }
         if (h.hasLivestreams) {
             Row(

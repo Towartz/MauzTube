@@ -607,7 +607,18 @@ private fun ChannelBar(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(enabled = d.uploaderUrl != null) { d.uploaderUrl?.let(onChannel) }
+            .clickable(enabled = d.uploaderUrl != null) {
+                d.uploaderUrl?.let { url ->
+                    com.mauztube.data.model.ChannelPreviews.put(
+                        url = url,
+                        name = d.uploaderName,
+                        avatarUrl = d.uploaderAvatarUrl,
+                        subscriberCount = d.uploaderSubscriberCount,
+                        verified = d.uploaderVerified,
+                    )
+                    onChannel(url)
+                }
+            }
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

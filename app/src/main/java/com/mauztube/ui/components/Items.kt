@@ -438,7 +438,12 @@ fun ContentList(
                     item { SkeletonList(Modifier.height(900.dp), count = 3) }
                 }
             } else SkeletonList(modifier)
-            state.error != null -> MessageView(tr("Error: ${state.error}", "Errore: ${state.error}"), modifier, onAction = onRetry)
+            state.error != null -> if (header != null) {
+                LazyColumn(modifier.fillMaxSize()) {
+                    header()
+                    item { MessageView(tr("Error: ${state.error}", "Errore: ${state.error}"), Modifier.height(240.dp), onAction = onRetry) }
+                }
+            } else MessageView(tr("Error: ${state.error}", "Errore: ${state.error}"), modifier, onAction = onRetry)
             header != null -> LazyColumn(modifier.fillMaxSize()) {
                 header()
                 item { MessageView(emptyMessage, Modifier.height(240.dp)) }
@@ -481,7 +486,10 @@ fun ContentList(
         }) { item ->
             when (item) {
                 is VideoItem -> VideoCard(item, onClick = { VideoPreviews.put(item); onVideo(item) })
-                is ChannelItem -> ChannelRow(item, onClick = { onChannel(item) })
+                is ChannelItem -> ChannelRow(item, onClick = {
+                    com.mauztube.data.model.ChannelPreviews.put(item.url, item.name, item.avatarUrl, item.subscriberCount)
+                    onChannel(item)
+                })
                 is com.mauztube.data.model.PlaylistItem -> PlaylistRow(item, onClick = { onPlaylist(item) })
             }
         }

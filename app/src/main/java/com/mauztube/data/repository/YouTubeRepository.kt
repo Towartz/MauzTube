@@ -128,22 +128,40 @@ class YouTubeRepository @Inject constructor(
 
     // ---------------- Canali ----------------
 
-    suspend fun channel(url: String, tabFilter: String = ChannelTabs.VIDEOS): ChannelDetails = io {
-        val info = ChannelInfo.getInfo(service, url)
+    private val channelCache = object : LinkedHashMap<String, Pair<Long, ChannelInfo>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, ChannelInfo>>) = size > 24
+    }
+
+    suspend fun channel(
+        url: String,
+        tabFilter: String = ChannelTabs.VIDEOS,
+        onHeader: ((ChannelDetails) -> Unit)? = null,
+    ): ChannelDetails = io {
+        val now = System.currentTimeMillis()
+        val info = synchronized(channelCache) {
+            channelCache[url]?.takeIf { now - it.first < 5 * 60_000L }?.second
+        } ?: ChannelInfo.getInfo(service, url).also { fetched ->
+            synchronized(channelCache) { channelCache[url] = now to fetched }
+        }
         // La tab "Shorts" non viene mai caricata.
         val hasLivestreams = info.tabs.any { ChannelTabs.LIVESTREAMS in it.contentFilters }
-        val targetTab = info.tabs.firstOrNull { tabFilter in it.contentFilters }
-            ?: info.tabs.firstOrNull { ChannelTabs.VIDEOS in it.contentFilters }
-        ChannelDetails(
+        val header = ChannelDetails(
             url = info.url,
             name = info.name,
             avatarUrl = info.avatars.bestUrl(),
             bannerUrl = info.banners.bestUrl(),
             subscriberCount = info.subscriberCount,
             description = info.description,
-            videos = targetTab?.let { channelTab(it) } ?: Paged(emptyList(), null),
+            videos = Paged(emptyList(), null),
             verified = info.isVerified,
             hasLivestreams = hasLivestreams,
+        )
+        onHeader?.invoke(header)
+        val targetTab = info.tabs.firstOrNull { tabFilter in it.contentFilters }
+            ?: info.tabs.firstOrNull { ChannelTabs.VIDEOS in it.contentFilters }
+            ?: info.tabs.firstOrNull { ChannelTabs.SHORTS !in it.contentFilters }
+        header.copy(
+            videos = targetTab?.let { channelTab(it) } ?: Paged(emptyList(), null),
         )
     }
 
