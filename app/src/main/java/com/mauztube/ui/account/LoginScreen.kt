@@ -67,9 +67,9 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     var loading by remember { mutableStateOf(true) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val hasDeviceAuthenticator = remember { MicroGHelper.hasMicroGAuthenticator(context) }
+    val microGTypes = remember { MicroGHelper.microGAccountTypes(context) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    var pendingAccount by remember { mutableStateOf<String?>(null) }
+    var pendingAccount by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     fun loadAuthUrl(authUrl: String) {
         if (!AccountManager.isTrustedGoogleUrl(authUrl.toHttpUrlOrNull())) {
@@ -96,11 +96,11 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
         if (res.resultCode == Activity.RESULT_OK && acct != null) {
             loading = true
             scope.launch {
-                when (val out = MicroGHelper.requestWebLoginUrl(context, acct)) {
+                when (val out = MicroGHelper.requestWebLoginUrl(context, acct.first, acct.second)) {
                     is MicroGHelper.WebLoginResult.Url -> loadAuthUrl(out.url)
                     is MicroGHelper.WebLoginResult.Error -> {
                         loading = true
-                        webViewRef?.loadUrl(loginUrlFor(acct))
+                        webViewRef?.loadUrl(loginUrlFor(acct.first))
                         Feedback.show(
                             tr(
                                 "Google blocks one-tap device login for third-party apps — continue below or use Import cookies in Settings.",
@@ -120,11 +120,13 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
     }
 
     val accountPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-        val acct = res.data?.getStringExtra(AndroidAccountManager.KEY_ACCOUNT_NAME) ?: return@rememberLauncherForActivityResult
-        pendingAccount = acct
+        val name = res.data?.getStringExtra(AndroidAccountManager.KEY_ACCOUNT_NAME) ?: return@rememberLauncherForActivityResult
+        val type = res.data?.getStringExtra(AndroidAccountManager.KEY_ACCOUNT_TYPE)
+            ?: microGTypes.firstOrNull() ?: return@rememberLauncherForActivityResult
+        pendingAccount = name to type
         loading = true
         scope.launch {
-            when (val out = MicroGHelper.requestWebLoginUrl(context, acct)) {
+            when (val out = MicroGHelper.requestWebLoginUrl(context, name, type)) {
                 is MicroGHelper.WebLoginResult.Url -> loadAuthUrl(out.url)
                 is MicroGHelper.WebLoginResult.NeedConsent -> {
                     loading = false
@@ -132,7 +134,7 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                 }
                 is MicroGHelper.WebLoginResult.Error -> {
                     loading = true
-                    webViewRef?.loadUrl(loginUrlFor(acct))
+                    webViewRef?.loadUrl(loginUrlFor(name))
                     Feedback.show(
                         tr(
                             "Google blocks one-tap device login for third-party apps — continue below or use Import cookies in Settings.",
@@ -150,12 +152,12 @@ fun LoginScreen(onDone: () -> Unit, vm: LoginViewModel = hiltViewModel()) {
                 title = { Text(tr("Sign in to Google", "Accedi a Google")) },
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Default.Close, tr("Close", "Chiudi")) } },
                 actions = {
-                    if (hasDeviceAuthenticator) {
+                    if (microGTypes.isNotEmpty()) {
                         TextButton(onClick = {
-                            runCatching { accountPickerLauncher.launch(MicroGHelper.chooseAccountIntent()) }
-                                .onFailure { Feedback.show(tr("No Google/microG account picker available", "Nessun selettore account Google/microG disponibile")) }
+                            runCatching { accountPickerLauncher.launch(MicroGHelper.chooseAccountIntent(microGTypes)) }
+                                .onFailure { Feedback.show(tr("No microG account picker available", "Nessun selettore account microG disponibile")) }
                         }) {
-                            Text(tr("Device account", "Account dispositivo"))
+                            Text(tr("MicroG account", "Account microG"))
                         }
                     }
                 },
