@@ -31,6 +31,8 @@ import kotlinx.coroutines.delay
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
@@ -247,13 +249,13 @@ fun VideoMenu(video: VideoItem) {
                 )
                 DropdownMenuItem(
                     text = { Text(tr("Not interested", "Non mi interessa")) },
-                    leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Close, null) },
+                    leadingIcon = { Icon(Icons.Default.Close, null) },
                     onClick = { open = false; actions.hideVideo(video) },
                 )
                 if (video.uploaderName.isNotBlank() || video.uploaderUrl != null) {
                     DropdownMenuItem(
                         text = { Text(tr("Don't recommend channel", "Non consigliare canale")) },
-                        leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Clear, null) },
+                        leadingIcon = { Icon(Icons.Default.Clear, null) },
                         onClick = { open = false; actions.hideChannel(video) },
                     )
                 }
