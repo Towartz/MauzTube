@@ -46,6 +46,7 @@ class PlayerViewModel @Inject constructor(
     val nowPlaying: StateFlow<NowPlaying?> = manager.nowPlaying
     val audioOnly: StateFlow<Boolean> = manager.audioOnly
     val skipEvents = manager.skipEvents
+    val switchedFrom = manager.switchedFrom
     val queue = manager.queue
 
     val fullscreen: StateFlow<Boolean> = manager.fullscreen
@@ -74,6 +75,8 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun retry() = manager.retry()
+    fun restorePrevious() = manager.restorePrevious()
+    fun dismissSwitchedFrom() = manager.dismissSwitchedFrom()
     fun setFullscreen(value: Boolean) = manager.setFullscreen(value)
 
     /** Tocco su 👍 / 👎: un secondo tocco sullo stesso pulsante annulla la valutazione. */

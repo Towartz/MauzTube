@@ -174,6 +174,20 @@ fun PlayerScreen(
         }
     }
 
+    // ---- Ripristino rapido in caso di tocco accidentale su un altro video ----
+    val switchedFrom by vm.switchedFrom.collectAsStateWithLifecycle()
+    LaunchedEffect(vm.videoId, switchedFrom?.videoId) {
+        val prev = switchedFrom ?: return@LaunchedEffect
+        if (prev.videoId == vm.videoId) return@LaunchedEffect
+        snackbar.currentSnackbarData?.dismiss()
+        val result = snackbar.showSnackbar(
+            message = tr("Switched from: ${prev.title}", "Uscito da: ${prev.title}"),
+            actionLabel = tr("Undo", "Annulla"),
+            duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) vm.restorePrevious() else vm.dismissSwitchedFrom()
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = if (fullscreen) Color.Black else MaterialTheme.colorScheme.background,
@@ -463,6 +477,7 @@ private fun Details(
         if (!d.isLive) item(key = "comments") { commentsSlot() }
         if (d.related.isNotEmpty()) {
             item(key = "next-title") {
+                HorizontalDivider(Modifier.padding(top = 12.dp))
                 Text(
                     tr("Up next", "Prossimi video"),
                     style = MaterialTheme.typography.titleSmall,

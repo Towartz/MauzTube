@@ -549,7 +549,12 @@ fun PlayerWithControls(
                                     backDispatcher.dispatchOnBackStarted(backEvent(pos, 0f))
                                 }
                                 if (collapsing) {
-                                    backDispatcher.dispatchOnBackProgressed(backEvent(pos, (total / screenH).coerceIn(0f, 1f)))
+                                    if (total <= 0f) {
+                                        backDispatcher.dispatchOnBackCancelled()
+                                        collapsing = false
+                                    } else {
+                                        backDispatcher.dispatchOnBackProgressed(backEvent(pos, (total / screenH).coerceIn(0f, 1f)))
+                                    }
                                 }
                             }
                             // Schermo intero, verso il basso: il video segue il dito e si rimpicciolisce.

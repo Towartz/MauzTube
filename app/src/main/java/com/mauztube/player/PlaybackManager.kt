@@ -74,6 +74,7 @@ data class NowPlaying(
 
 data class QualityOption(val height: Int, val label: String)
 data class TextTrackOption(val index: Int, val label: String)
+data class PreviousVideo(val videoId: String, val preview: VideoItem?, val title: String, val positionMs: Long)
 
 /**
  * Unico player dell'app, indipendente dalle schermate: è ciò che rende possibili il mini
@@ -230,6 +231,10 @@ class PlaybackManager @Inject constructor(
     private val _skipEvents = MutableSharedFlow<SkipEvent>(extraBufferCapacity = 4)
     val skipEvents: SharedFlow<SkipEvent> = _skipEvents
 
+    /** Video precedente interrotto da un cambio rapido: consente "Annulla" in caso di tocco accidentale. */
+    private val _switchedFrom = MutableStateFlow<PreviousVideo?>(null)
+    val switchedFrom: StateFlow<PreviousVideo?> = _switchedFrom
+
     private var details: VideoDetails? = null
     private var settings = AppSettings()
     private var loadJob: Job? = null
@@ -380,9 +385,18 @@ class PlaybackManager @Inject constructor(
         _loop.value = false
         player.repeatMode = Player.REPEAT_MODE_OFF
         // Il video precedente viene chiuso salvandone posizione e cronologia.
-        if (_nowPlaying.value != null) {
+        val prev = _nowPlaying.value
+        if (prev != null) {
+            val pos = player.currentPosition.coerceAtLeast(0L)
+            val prevTitle = details?.title ?: prev.preview?.title.orEmpty()
+            val interrupted = player.playbackState != Player.STATE_ENDED && (pos >= 2_000L || details != null)
+            _switchedFrom.value = if (interrupted && prevTitle.isNotBlank()) {
+                PreviousVideo(prev.videoId, prev.preview ?: details?.toItem(), prevTitle, pos)
+            } else null
             savePosition()
             reportWatchProgress()
+        } else {
+            _switchedFrom.value = null
         }
         details = null
         subtitleJob?.cancel()
@@ -425,6 +439,7 @@ class PlaybackManager @Inject constructor(
         _queue.value = emptyList()
         _fullscreen.value = false
         _videoSize.value = androidx.media3.common.VideoSize.UNKNOWN
+        _switchedFrom.value = null
         appScope.launch(saveDispatcher) { playback.clearActiveVideo() }
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
@@ -436,6 +451,14 @@ class PlaybackManager @Inject constructor(
     }
 
     fun undoSkip(event: SkipEvent) = skipper.undo(event)
+
+    fun restorePrevious() {
+        val prev = _switchedFrom.value ?: return
+        _switchedFrom.value = null
+        open(prev.videoId, prev.preview, resume = false, startMs = prev.positionMs)
+    }
+
+    fun dismissSwitchedFrom() { _switchedFrom.value = null }
 
     /** Loop del video corrente. */
     fun setLoop(enabled: Boolean) {
