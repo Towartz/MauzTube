@@ -238,7 +238,7 @@ fun CommentsSheet(vm: CommentsViewModel, videoTitle: String, thumbnailUrl: Strin
                 )
             }
             HorizontalDivider()
-            LazyColumn(Modifier.heightIn(max = 640.dp), state = listState) {
+            LazyColumn(Modifier.weight(1f, fill = false), state = listState) {
                 items(ui.items, key = { it.id }) { c ->
                     CommentRow(c, indent = false)
                     val replies = vm.replies[c.id]
@@ -296,9 +296,23 @@ private fun CommentRow(c: CommentItem, indent: Boolean) {
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(c.author, style = MaterialTheme.typography.labelMedium, fontWeight = if (c.byChannelOwner) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+                Text(
+                    c.author,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (c.byChannelOwner) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
                 Text("  ${c.date}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                if (c.pinned) Text("  📌", style = MaterialTheme.typography.labelSmall)
+                if (c.pinned) {
+                    Text(
+                        tr("Pinned", "In evidenza"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
             }
             Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
             if (c.likes.isNotEmpty()) {

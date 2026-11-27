@@ -561,7 +561,7 @@ private fun ChannelBar(
         Avatar(d.uploaderAvatarUrl, d.uploaderName, 40)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(d.uploaderName, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+            Text(d.uploaderName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (d.uploaderSubscriberCount >= 0) {
                 Text(
                     tr("${Format.count(d.uploaderSubscriberCount)} subscribers", "${Format.count(d.uploaderSubscriberCount)} iscritti"),
@@ -571,6 +571,7 @@ private fun ChannelBar(
             }
         }
         if (d.uploaderUrl != null) {
+            Spacer(Modifier.width(8.dp))
             // Iscriviti ⇄ Iscritto: colore e testo cambiano con una transizione morbida.
             val container by androidx.compose.animation.animateColorAsState(
                 if (subscribed) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,

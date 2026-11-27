@@ -285,7 +285,7 @@ fun ChannelRow(channel: ChannelItem, onClick: () -> Unit) {
         Avatar(channel.avatarUrl, channel.name, 64)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text(channel.name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            Text(channel.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (channel.subscriberCount >= 0) {
                 Text(
                     tr("${Format.count(channel.subscriberCount)} subscribers", "${Format.count(channel.subscriberCount)} iscritti"),
@@ -310,17 +310,34 @@ fun SkeletonList(modifier: Modifier = Modifier, count: Int = 4) {
         label = "alpha",
     )
     val color = MaterialTheme.colorScheme.surfaceVariant
+    val screenW = windowSize().widthDp
+    val wide = screenW >= 600f
     Column(modifier.fillMaxSize().alpha(alpha)) {
         repeat(count) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(ThumbShape).background(color))
-                Row(Modifier.padding(top = 10.dp)) {
-                    Box(Modifier.size(36.dp).clip(CircleShape).background(color))
-                    Spacer(Modifier.width(12.dp))
+            if (wide) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(Modifier.width((screenW * 0.32f).coerceIn(220f, 360f).dp).aspectRatio(16f / 9f).clip(ThumbShape).background(color))
+                    Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Box(Modifier.fillMaxWidth(0.9f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(color))
-                        Spacer(Modifier.height(6.dp))
-                        Box(Modifier.fillMaxWidth(0.55f).height(12.dp).clip(RoundedCornerShape(4.dp)).background(color))
+                        Box(Modifier.fillMaxWidth(0.85f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(color))
+                        Spacer(Modifier.height(8.dp))
+                        Box(Modifier.fillMaxWidth(0.5f).height(12.dp).clip(RoundedCornerShape(4.dp)).background(color))
+                    }
+                }
+            } else {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(ThumbShape).background(color))
+                    Row(Modifier.padding(top = 10.dp)) {
+                        Box(Modifier.size(36.dp).clip(CircleShape).background(color))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Box(Modifier.fillMaxWidth(0.9f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(color))
+                            Spacer(Modifier.height(6.dp))
+                            Box(Modifier.fillMaxWidth(0.55f).height(12.dp).clip(RoundedCornerShape(4.dp)).background(color))
+                        }
                     }
                 }
             }
