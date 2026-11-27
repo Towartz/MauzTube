@@ -392,7 +392,8 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
                     )
                     TextButton(onClick = {
                         val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                        val pasted = cm?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                        val clip = cm?.primaryClip?.takeIf { it.itemCount > 0 }
+                        val pasted = clip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
                         if (pasted.isNotBlank()) { raw = pasted; error = false }
                     }) { Text(tr("Paste from clipboard", "Incolla dagli appunti")) }
                 }
@@ -418,9 +419,9 @@ fun SettingsScreen(onLogin: () -> Unit, modifier: Modifier = Modifier, vm: Setti
             scope.launch {
                 val ok = withContext(Dispatchers.IO) {
                     runCatching {
-                        context.contentResolver.openOutputStream(uri)?.use {
-                            it.write(exported.toByteArray(Charsets.UTF_8))
-                        } != null
+                        val stream = context.contentResolver.openOutputStream(uri) ?: return@runCatching false
+                        stream.use { it.write(exported.toByteArray(Charsets.UTF_8)) }
+                        true
                     }.getOrDefault(false)
                 }
                 android.widget.Toast.makeText(
