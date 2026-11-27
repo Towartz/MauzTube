@@ -61,12 +61,19 @@ data class ChannelDetails(
     val videos: Paged<VideoItem>,
     val verified: Boolean = false,
     val hasLivestreams: Boolean = false,
+    val availableTabs: List<String> = emptyList(),
 )
 
 data class VideoChapter(
     val title: String,
     val startSeconds: Int,
     val previewUrl: String? = null,
+)
+
+data class VideoMetaBox(
+    val title: String,
+    val content: String,
+    val url: String? = null,
 )
 
 data class VideoDetails(
@@ -96,6 +103,7 @@ data class VideoDetails(
     val uploaderVerified: Boolean = false,
     val category: String? = null,
     val licence: String? = null,
+    val metaInfo: List<VideoMetaBox> = emptyList(),
 )
 
 /**
@@ -151,6 +159,8 @@ data class StreamOption(
     val fps: Int,
     val bitrate: Int,
     val isOriginalAudio: Boolean,
+    val audioTrackName: String? = null,
+    val audioLocale: String? = null,
     /** Dimensione in byte (stima dei download), -1 se sconosciuta. */
     val contentLength: Long = -1,
     val itag: Int = -1,

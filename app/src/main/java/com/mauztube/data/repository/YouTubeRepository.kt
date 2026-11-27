@@ -101,6 +101,11 @@ class YouTubeRepository @Inject constructor(
 
     // ---------------- Ricerca ----------------
 
+    suspend fun suggestions(query: String): List<String> = io {
+        if (query.isBlank()) return@io emptyList()
+        runCatching { service.suggestionExtractor.suggestionList(query) }.getOrDefault(emptyList())
+    }
+
     suspend fun search(query: String, filter: String = YoutubeSearchQueryHandlerFactory.ALL): Paged<ContentItem> = io {
         val handler = service.searchQHFactory.fromQuery(
             query, listOf(filter), "",
@@ -144,7 +149,9 @@ class YouTubeRepository @Inject constructor(
             synchronized(channelCache) { channelCache[url] = now to fetched }
         }
         // La tab "Shorts" non viene mai caricata.
-        val hasLivestreams = info.tabs.any { ChannelTabs.LIVESTREAMS in it.contentFilters }
+        val supportedTabs = listOf(ChannelTabs.VIDEOS, ChannelTabs.LIVESTREAMS, ChannelTabs.PODCASTS, ChannelTabs.COURSES)
+        val availableTabs = supportedTabs.filter { tab -> info.tabs.any { tab in it.contentFilters } }
+        val hasLivestreams = ChannelTabs.LIVESTREAMS in availableTabs
         val header = ChannelDetails(
             url = info.url,
             name = info.name,
@@ -155,6 +162,7 @@ class YouTubeRepository @Inject constructor(
             videos = Paged(emptyList(), null),
             verified = info.isVerified,
             hasLivestreams = hasLivestreams,
+            availableTabs = availableTabs,
         )
         onHeader?.invoke(header)
         val targetTab = info.tabs.firstOrNull { tabFilter in it.contentFilters }
@@ -333,6 +341,15 @@ class YouTubeRepository @Inject constructor(
             uploaderVerified = info.isUploaderVerified,
             category = info.category?.takeIf { it.isNotBlank() },
             licence = info.licence?.takeIf { it.isNotBlank() },
+            metaInfo = info.metaInfo.mapNotNull { m ->
+                val content = m.content?.content().orEmpty()
+                if (m.title.isBlank() && content.isBlank()) null
+                else com.mauztube.data.model.VideoMetaBox(
+                    title = m.title,
+                    content = content,
+                    url = m.urls.firstOrNull()?.toString(),
+                )
+            },
         )
     }
 
